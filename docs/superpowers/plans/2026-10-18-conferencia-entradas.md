@@ -151,7 +151,7 @@ git commit -m "feat: modelo de dados e normalizacao de campos"
 **Interfaces:**
 - Consumes: `modelo.LancamentoDominio`, `modelo.NotaDominio`, `modelo.ESPECIES_NFE`.
 - Produces:
-  - `conferencia.agrega_dominio(lancamentos: list[LancamentoDominio], especies_nfe: frozenset[int] = ESPECIES_NFE) -> tuple[list[NotaDominio], list[LancamentoDominio]]` — devolve `(notas_nfe_agregadas, lancamentos_fora_do_conjunto_nfe)`. Agrupa por `(cnpj_emitente, numero)`, soma `valor_contabil`, e toma `nome_emitente`, `serie`, `especie` e `data_emissao` da primeira linha do grupo. `linhas` recebe a contagem do grupo. A ordem de saída é a de primeira aparição.
+  - `conferencia.agrega_dominio(lancamentos: list[LancamentoDominio], especies_nfe: frozenset[int] = ESPECIES_NFE) -> tuple[list[NotaDominio], list[LancamentoDominio]]` — devolve `(notas_nfe_agregadas, lancamentos_fora_do_conjunto_nfe)`. Agrupa por `(cnpj_emitente, numero, serie)`, soma `valor_contabil`, e toma `nome_emitente`, `especie` e `data_emissao` da primeira linha do grupo. `linhas` recebe a contagem do grupo. A ordem de saída é a de primeira aparição. A série entra na chave de agregação porque a quebra por CFOP sempre a repete (spec §3.2).
   - `tests/construtores.py`: `lanc(**kw) -> LancamentoDominio` e `nota(**kw) -> NotaSefaz`, fábricas com valores padrão plausíveis sobrescrevíveis por keyword.
 
 - [ ] **Step 1: Escrever os testes que falham**
@@ -181,6 +181,18 @@ def test_nao_mistura_mesmo_numero_de_cnpjs_diferentes():
     notas, _ = agrega_dominio(linhas)
     assert len(notas) == 2
     assert {n.valor_contabil for n in notas} == {Decimal("10.00"), Decimal("20.00")}
+
+def test_mesmo_numero_em_series_distintas_nao_e_somado():
+    # series distintas sao notas distintas; a quebra por CFOP sempre repete a serie
+    linhas = [
+        lanc(numero=111, serie="1", valor_contabil=Decimal("10.00")),
+        lanc(numero=111, serie="2", valor_contabil=Decimal("20.00")),
+    ]
+    notas, _ = agrega_dominio(linhas)
+    assert len(notas) == 2
+    assert {n.serie: n.valor_contabil for n in notas} == {
+        "1": Decimal("10.00"), "2": Decimal("20.00"),
+    }
 
 def test_separa_especies_fora_do_conjunto_nfe():
     linhas = [
@@ -333,10 +345,14 @@ def test_mesmo_cnpj_e_numero_em_series_distintas_desempata_pela_serie():
     assert categorias(ocs) == [Categoria.SOBRANDO]
     assert ocs[0].serie == "1"
 
-def test_duplicata_indistinguivel_por_serie_vira_ambiguo():
-    s = nota(numero=111, serie="1")
-    d = [lanc(numero=111, serie="1"), lanc(numero=111, serie="1")]
-    assert Categoria.AMBIGUO in categorias(confere_par([s], d))
+def test_nenhum_candidato_com_a_serie_da_sefaz_vira_ambiguo():
+    s = nota(numero=111, serie="3")
+    d = [lanc(numero=111, serie="1"), lanc(numero=111, serie="2")]
+    ocs = confere_par([s], d)
+    assert categorias(ocs).count(Categoria.AMBIGUO) == 1
+    assert categorias(ocs).count(Categoria.SOBRANDO) == 2
+    # a nota da Sefaz nao pode sumir: a ocorrencia AMBIGUO carrega a chave dela
+    assert next(o for o in ocs if o.categoria == Categoria.AMBIGUO).chave == s.chave
 
 def test_ordem_das_entradas_nao_muda_o_resultado():
     s = [nota(numero=1), nota(numero=2)]

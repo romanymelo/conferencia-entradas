@@ -86,15 +86,25 @@ Valores monetários usam `Decimal`, nunca `float`.
 CNPJ normalizado para apenas dígitos. Número normalizado para inteiro (sem
 zeros à esquerda).
 
-Se o mesmo CNPJ + número aparecer mais de uma vez em um dos lados, desempatar
-pela série. Se ainda restar ambiguidade, não casar: registrar o caso como
-alerta `AMBÍGUO` e seguir.
+Se o mesmo CNPJ + número aparecer mais de uma vez em um dos lados — o que só
+ocorre com séries distintas, por causa de §3.2 — desempatar pela série. Se
+nenhum candidato tiver a série da nota da Sefaz, não casar: registrar o caso
+como alerta `AMBÍGUO`, carregando a chave de acesso da nota da Sefaz para que
+ela não desapareça do relatório, e deixar os candidatos do Domínio caírem em
+`SOBRANDO`.
 
 ### 3.2 Agregação do Domínio
 
 Antes do casamento, somar o `Valor Contábil` de todas as linhas que
-compartilham CNPJ + número. A data de emissão e a série são as da primeira
-linha do grupo (são iguais dentro do grupo).
+compartilham CNPJ + número + série. A data de emissão é a da primeira linha
+do grupo (é igual dentro do grupo).
+
+A série integra a chave de agregação — e não a chave de casamento (§3.1) —
+porque a quebra por CFOP de uma mesma nota sempre repete a série. Verificado
+nos 21 grupos multi-linha da amostra 101 (notas 117, 4871, 90312, 1004582,
+1500233 e as demais): em nenhum a série varia entre as linhas. Agrupar só por
+CNPJ + número fundiria notas de séries distintas, que são notas diferentes, e
+destruiria a informação de que o desempate de §3.1 depende.
 
 Validado na amostra: nota 1004582 de `45.723.174/0011-92` ocupa duas linhas no
 Domínio (52,10 em CFOP 1-102 e 140,30 em 1-403); a soma 192,40 é exatamente o
