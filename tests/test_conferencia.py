@@ -132,3 +132,16 @@ def test_status_ok_sem_erros():
 
 def test_status_divergente_com_faltando():
     assert status_de(confere_par([nota(numero=1)], [])) == Status.DIVERGENTE
+
+
+import pytest
+
+
+@pytest.mark.parametrize("emissao, esperada", [
+    (date(2026, 10, 1), Categoria.FORA_DO_PERIODO),   # depois do fim
+    (date(2026, 9, 1), Categoria.SOBRANDO),           # primeiro dia: inclusivo
+    (date(2026, 9, 30), Categoria.SOBRANDO),          # ultimo dia: inclusivo
+])
+def test_corte_do_periodo_por_emissao_separa_sobrando_de_fora_do_periodo(emissao, esperada):
+    d = [lanc(numero=77, data_emissao=emissao, data_entrada=date(2026, 9, 15))]
+    assert categorias(confere_par([], d)) == [esperada]

@@ -7,12 +7,12 @@ from pathlib import Path
 from conferencia import leitor_dominio, leitor_sefaz
 from conferencia.conferencia import agrega_dominio, confere, status_de
 from conferencia.descoberta import ArquivoIdentificado, Par, identifica, pareia
-from conferencia.modelo import ResultadoEmpresa, Status
+from conferencia.modelo import ESPECIES_NFE, ResultadoEmpresa, Status
 from conferencia.planilha import escreve_planilha
 from conferencia.relatorio_pdf import escreve_relatorio, nome_arquivo
 
 LIMITE_CODIGO_SAIDA = 125
-CODIGO_ENTRADA_INVALIDA = 2  # reservado; 1 já significa "1 empresa divergente"
+CODIGO_ENTRADA_INVALIDA = 126  # 1..125 = nº de empresas divergentes (LIMITE_CODIGO_SAIDA)
 
 
 def _erro_leitura(erro: str) -> ResultadoEmpresa:
@@ -27,8 +27,11 @@ def _confere_par(par: Par) -> ResultadoEmpresa:
     _, notas_sefaz = leitor_sefaz.le_sefaz(par.caminho_sefaz)
     _, lancamentos = leitor_dominio.le_dominio(par.caminho_dominio)
     empresa = par.empresa
-    ocorrencias = confere(notas_sefaz, lancamentos, empresa.periodo_inicio, empresa.periodo_fim)
-    notas_dominio, _ = agrega_dominio(lancamentos)
+    # mesmo conjunto de espécies na classificação e nos totais do Resumo
+    ocorrencias = confere(
+        notas_sefaz, lancamentos, empresa.periodo_inicio, empresa.periodo_fim, ESPECIES_NFE
+    )
+    notas_dominio, _ = agrega_dominio(lancamentos, ESPECIES_NFE)
     resultado = ResultadoEmpresa(
         empresa=empresa,
         status=status_de(ocorrencias),

@@ -23,7 +23,7 @@ python main.py
 python main.py --entrada outra_pasta --saida outra_saida
 ```
 
-O código de saída é a quantidade de empresas `DIVERGENTE` (no máximo 125); 2 é reservado
+O código de saída é a quantidade de empresas `DIVERGENTE` (no máximo 125); 126 é reservado
 para pasta de entrada inexistente.
 PDFs que não são relatórios da Sefaz nem do Domínio são ignorados e registrados
 no log.
@@ -55,13 +55,13 @@ coluna `Observação`. Uma falha de leitura em uma empresa não interrompe as de
 | `SEM PAR` | Falta o relatório da Sefaz ou do Domínio. |
 | `PERÍODO DIVERGENTE` | Os dois relatórios cobrem períodos diferentes. |
 | `DUPLICADO` | Mais de um arquivo do mesmo tipo para o mesmo CNPJ. |
-| `ERRO DE LEITURA` | PDF ilegível ou linha de dados fora do layout esperado. |
+| `ERRO DE LEITURA` | PDF ilegível, linha de dados fora do layout esperado, ou leitura que não fecha com o rodapé do próprio relatório (Quantidade de Notas / valor total da Sefaz; Total Geral do Domínio). |
 
 ## Categorias de ocorrência
 
 Erros (definem o status `DIVERGENTE`):
 
-- `FALTANDO`: nota ativa na Sefaz sem lançamento no Domínio.
+- `FALTANDO`: nota da Sefaz, ativa ou cancelada, sem lançamento no Domínio. Nota cancelada também precisa estar lançada, zerada; a ausência dela é omissão de informação, não falso positivo.
 - `CANCELADA NÃO ZERADA`: nota cancelada na Sefaz, lançada no Domínio com valor diferente de zero.
 
 Alertas:
