@@ -29,6 +29,11 @@ def _chave(numero: int) -> str:
     return "276" + "666" + "45723174001192" + "55" + "001" + f"{numero:09d}" + "0" * 10
 
 
+def _soma(valores) -> str:
+    total = sum((Decimal(v.replace(".", "").replace(",", ".")) for v in valores), Decimal("0"))
+    return f"{total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def _sefaz(caminho, notas, cnpj="12.345.678/0001-95"):
     linhas = [
         "SECRETARIA DE ESTADO DA FAZENDA DE ALAGOAS",
@@ -41,6 +46,7 @@ def _sefaz(caminho, notas, cnpj="12.345.678/0001-95"):
             f"05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / {numero} "
             f"{_chave(numero)} Saída Ativa {valor}"
         )
+    linhas += [f"Quantidade de Notas: {len(notas)}", f"Valor Total: {_soma(v for _, v in notas)}"]
     _pdf(caminho, linhas)
 
 
@@ -56,7 +62,7 @@ def _dominio(caminho, notas, cnpj="12.345.678/0001-95", extra=()):
             f"1 05/09/2026 05/09/2026 {numero} 1 36 6 FORNECEDOR TESTE LTDA "
             f"45.723.174/0011-92 240000015 1-102 101 AL {valor} ICMS 0,00"
         )
-    _pdf(caminho, [*linhas, *extra])
+    _pdf(caminho, [*linhas, *extra, f"Total Geral {_soma(v for _, v in notas)} 0,00"])
 
 
 @pytest.fixture
@@ -120,6 +126,22 @@ def test_empresa_sem_ocorrencia_tambem_gera_pdf(entrada, tmp_path):
     assert _resumo(saida)[0]["Status"] == Status.OK
 
 
+def test_agrega_linhas_de_cfop_da_mesma_nota_e_fecha_com_a_sefaz(entrada, tmp_path):
+    # uma nota, duas linhas de CFOP no Domínio: 52,10 + 140,30 = 192,40 (valor da Sefaz)
+    saida = tmp_path / "saida"
+    _sefaz(entrada / "s.pdf", [(100, "192,40")])
+    _dominio(entrada / "d.pdf", [(100, "52,10"), (100, "140,30")])
+
+    assert executa(entrada, saida) == 0
+
+    [linha] = _resumo(saida)
+    assert linha["Status"] == Status.OK
+    assert linha["Qtd Domínio"] == 1
+    assert Decimal(str(linha["Total Domínio"])) == Decimal("189.63")
+    assert Decimal(str(linha["Total Sefaz"])) == Decimal("189.63")
+    assert linha[Categoria.VALOR_DIVERGENTE] == 0
+
+
 def test_sem_par_aparece_no_resumo_sem_pdf(entrada, tmp_path):
     saida = tmp_path / "saida"
     _sefaz(entrada / "s.pdf", [(100, "50,00")])
@@ -162,6 +184,27 @@ def test_linha_fora_do_layout_derruba_so_a_empresa(entrada, tmp_path):
     assert "d1.pdf" in erro["Observação"]
     assert "d1.pdf" in _log(saida)
     assert len(list(saida.rglob("*.pdf"))) == 1
+
+
+def test_sefaz_com_nota_perdida_na_leitura_vira_erro_de_leitura_nao_ok(entrada, tmp_path):
+    # chave partida em dois tokens: sem o rodape a empresa sairia OK com 0 notas lidas
+    saida = tmp_path / "saida"
+    _pdf(entrada / "s.pdf", [
+        "SECRETARIA DE ESTADO DA FAZENDA DE ALAGOAS",
+        "CNPJ: 12.345.678/0001-95",
+        "Razão Social: FARMACIA MODELO LTDA",
+        "Período: 01/09/2026 - 30/09/2026",
+        f"05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / 100 "
+        f"{_chave(100)} Saída Ativa 50,00",
+        f"05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / 101 "
+        f"{_chave(101)[:20]} {_chave(101)[20:]} Saída Ativa 70,00",
+        "Quantidade de Notas: 2", "Valor Total: 120,00",
+    ])
+    _dominio(entrada / "d.pdf", [(100, "50,00"), (101, "70,00")])
+    assert executa(entrada, saida) == 0
+    [linha] = _resumo(saida)
+    assert linha["Status"] == Status.ERRO_LEITURA
+    assert "Quantidade de Notas" in linha["Observação"]
 
 
 # --- teste de ouro: depende dos PDFs reais, locais e não versionados ---

@@ -1,5 +1,6 @@
 import logging
 import re
+from decimal import Decimal
 from pathlib import Path
 
 import pdfplumber
@@ -18,6 +19,8 @@ _SITUACOES = {"Ativa", "Cancelada"}
 _TOLERANCIA_TOP = 2.0  # pt: palavras de uma mesma linha visual
 _PERIODO = re.compile(r"Período:\s*(\d{2}/\d{2}/\d{4})\s*-\s*(\d{2}/\d{2}/\d{4})")
 _CNPJ_ROTULO = re.compile(r"^CNPJ:\s*(\S+)", re.MULTILINE)
+# Rodape (spec 2.1): quantidade e valor total declarados pela propria Sefaz.
+_RODAPE = re.compile(r"Quantidade de Notas:?\s*(\d+)[^\d]*(\d[\d.]*,\d{2})")
 _RAZAO_ROTULO = re.compile(r"^Razão Social:\s*(.+?)\s*$", re.MULTILINE)
 
 
@@ -53,6 +56,8 @@ def parse_linha(palavras: list[dict]) -> NotaSefaz | None:
     achados = [i for i, t in enumerate(textos) if _CHAVE.fullmatch(t)]
     if not achados:
         return None
+    if len(achados) > 1:
+        raise ValueError(f"mais de uma chave de acesso na mesma linha: {' '.join(textos)!r}")
     k = achados[0]
     # layout: data hora cnpj nome... serie / numero chave tipo situacao valor
     if k < 6 or len(textos) < k + 4 or not _DATA.fullmatch(textos[0]) or not _CNPJ_CPF.fullmatch(textos[2]):
@@ -74,20 +79,42 @@ def parse_linha(palavras: list[dict]) -> NotaSefaz | None:
 def _linhas_da_pagina(pagina) -> list[list[dict]]:
     """Agrupa palavras por proximidade vertical (tolerancia, nao arredondamento)."""
     linhas: list[list[dict]] = []
-    ultimo_top = None
+    top_inicial = None  # ancora = 1a palavra do cluster; ancorar na anterior encadeia sem limite
     for p in sorted(pagina.extract_words(), key=lambda p: p["top"]):
-        if ultimo_top is None or p["top"] - ultimo_top > _TOLERANCIA_TOP:
+        if top_inicial is None or p["top"] - top_inicial > _TOLERANCIA_TOP:
             linhas.append([])
+            top_inicial = p["top"]
         linhas[-1].append(p)
-        ultimo_top = p["top"]
     return linhas
+
+
+def _confere_rodape(texto: str, notas: list[NotaSefaz]) -> None:
+    """Reconcilia o que foi lido com o que a Sefaz declara no rodape (spec 2.1).
+    Comparacao exata em Decimal: o total declarado e uma soma exata dos valores."""
+    if not notas:
+        raise ValueError("nenhuma linha de dados lida no relatorio da Sefaz")
+    rodapes = _RODAPE.findall(texto)
+    if len(rodapes) != 1:
+        raise ValueError(
+            f"rodape da Sefaz (Quantidade de Notas / valor total) encontrado {len(rodapes)} vez(es); esperado 1"
+        )
+    qtd, total = int(rodapes[0][0]), parse_valor_br(rodapes[0][1])
+    if qtd != len(notas):
+        raise ValueError(
+            f"Quantidade de Notas declarada no rodape ({qtd}) difere das linhas lidas ({len(notas)})"
+        )
+    soma = sum((n.valor for n in notas), Decimal("0"))
+    if soma != total:
+        raise ValueError(f"valor total declarado no rodape ({total}) difere da soma lida ({soma})")
 
 
 def le_sefaz(caminho: Path) -> tuple[Cabecalho, list[NotaSefaz]]:
     notas: list[NotaSefaz] = []
+    textos: list[str] = []
     with pdfplumber.open(caminho) as pdf:
         cabecalho = le_cabecalho(pdf.pages[0].extract_text() or "")
         for pagina in pdf.pages:
+            textos.append(pagina.extract_text() or "")
             for linha in _linhas_da_pagina(pagina):
                 nota = parse_linha(linha)
                 if nota is None:
@@ -100,4 +127,5 @@ def le_sefaz(caminho: Path) -> tuple[Cabecalho, list[NotaSefaz]]:
                         nota.chave, lido, da_chave,
                     )
                 notas.append(nota)
+    _confere_rodape("\n".join(textos), notas)
     return cabecalho, notas

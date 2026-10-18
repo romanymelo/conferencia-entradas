@@ -114,8 +114,8 @@ def test_le_dominio_le_paginas_inclusive_sem_dados_e_multipagina(tmp_path):
     outra = BASE.replace("1004582", "1004583", 1).replace("AL 52,10", "AL 10,00", 1)
     _gera_pdf(pdf, [
         CABECALHO + [BASE, outra],
-        ["Total Série", "Total Geral", "Sistema licenciado para TESTE"],
-        [BASE, "Total Série"],
+        ["Total Série", "Sistema licenciado para TESTE"],
+        [BASE, "Total Série", "Total Geral 108,32 0,00"],
     ])
     cab, lancs = le_dominio(pdf)
     assert cab.codigo == "101"
@@ -128,4 +128,50 @@ def test_le_dominio_levanta_em_linha_de_dados_invalida(tmp_path):
     pdf = tmp_path / "dominio.pdf"
     _gera_pdf(pdf, [CABECALHO + [BASE.replace("11.222.333/0001-44", "", 1)]])
     with pytest.raises(ValueError):
+        le_dominio(pdf)
+
+
+# --- reconciliacao contra o Total Geral ---
+
+OUTRA = BASE.replace("1004582", "1004583", 1).replace("AL 52,10", "AL 10,00", 1)
+
+
+def test_parse_linha_aceita_ancora_cpf_de_produtor_rural():
+    texto = BASE.replace("11.222.333/0001-44", "123.456.789-00", 1)
+    assert parse_linha(texto).cnpj_emitente == "00012345678900"
+
+
+def test_parse_linha_levanta_com_duas_linhas_de_dados_na_mesma_linha_de_texto():
+    # mecanismo 3: a 2a linha completa seria tratada como "cauda" de colunas e sumiria
+    with pytest.raises(ValueError, match="mais de um CNPJ/CPF"):
+        parse_linha(BASE + " " + OUTRA)
+
+
+def test_le_dominio_bem_formado_reconcilia_com_o_total_geral(tmp_path):
+    pdf = tmp_path / "dominio.pdf"
+    _gera_pdf(pdf, [CABECALHO + [BASE, OUTRA, "Total Geral 59,16 0,00"]])
+    _, lancs = le_dominio(pdf)
+    assert len(lancs) == 2
+
+
+def test_le_dominio_levanta_quando_uma_linha_de_dados_nao_e_reconhecida(tmp_path):
+    # codigo grudado na data: a linha nao casa com o inicio de dado e sumiria sem erro
+    pdf = tmp_path / "dominio.pdf"
+    ilegivel = OUTRA.replace("775 01/09/2026", "77501/09/2026", 1)
+    _gera_pdf(pdf, [CABECALHO + [BASE, ilegivel, "Total Geral 59,16 0,00"]])
+    with pytest.raises(ValueError, match="Total Geral"):
+        le_dominio(pdf)
+
+
+def test_le_dominio_levanta_quando_nenhuma_linha_de_dados_e_lida(tmp_path):
+    pdf = tmp_path / "dominio.pdf"
+    _gera_pdf(pdf, [CABECALHO + ["Total Geral 0,00"]])
+    with pytest.raises(ValueError, match="nenhum"):
+        le_dominio(pdf)
+
+
+def test_le_dominio_levanta_sem_total_geral(tmp_path):
+    pdf = tmp_path / "dominio.pdf"
+    _gera_pdf(pdf, [CABECALHO + [BASE]])
+    with pytest.raises(ValueError, match="Total Geral"):
         le_dominio(pdf)

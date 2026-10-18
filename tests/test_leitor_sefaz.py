@@ -101,6 +101,10 @@ def _linha(chave, valor="192,40"):
     return f"01/09/2026 08:52:43 11.222.333/0001-44 FORNECEDOR TESTE 1 / 99 {chave} Saída Ativa {valor}"
 
 
+def _rodape(qtd, total):
+    return [f"Quantidade de Notas: {qtd}", f"Valor Total: {total}"]
+
+
 CABECALHO = [
     "SECRETARIA DE ESTADO DA FAZENDA DE ALAGOAS",
     "Notas Fiscais de Entrada",
@@ -115,7 +119,7 @@ def test_le_sefaz_le_paginas_inclusive_sem_dados_e_com_uma_nota(tmp_path):
     _gera_pdf(pdf, [
         CABECALHO + [_linha(CHAVE_OK), _linha(CHAVE_OK, "1.532,66")],
         ["pagina sem nenhuma linha de dados"],
-        [_linha(CHAVE_OK), "Quantidade de Notas: 3"],
+        [_linha(CHAVE_OK), *_rodape(3, "1.911,92")],
     ])
     cab, notas = le_sefaz(pdf)
     assert cab.cnpj == "12345678000195"
@@ -126,7 +130,7 @@ def test_le_sefaz_le_paginas_inclusive_sem_dados_e_com_uma_nota(tmp_path):
 def test_le_sefaz_avisa_divergencia_da_chave_sem_interromper(tmp_path, caplog):
     pdf = tmp_path / "sefaz.pdf"
     chave_ruim = "9" * 44
-    _gera_pdf(pdf, [CABECALHO + [_linha(chave_ruim), _linha(CHAVE_OK)]])
+    _gera_pdf(pdf, [CABECALHO + [_linha(chave_ruim), _linha(CHAVE_OK), *_rodape(2, "379,26")]])
     with caplog.at_level(logging.WARNING):
         _, notas = le_sefaz(pdf)
     assert len(notas) == 2
@@ -161,9 +165,95 @@ def test_le_sefaz_agrupa_linha_com_tops_proximos_em_fronteira_de_arredondamento(
     ]
     pagina = MagicMock()
     pagina.extract_words.return_value = palavras_pdf
-    pagina.extract_text.return_value = chr(10).join(CABECALHO)
+    pagina.extract_text.return_value = chr(10).join(CABECALHO + _rodape(1, "192,40"))
     pdf = MagicMock(pages=[pagina])
     pdf.__enter__.return_value = pdf
     with patch("conferencia.leitor_sefaz.pdfplumber.open", return_value=pdf):
         _, notas = le_sefaz(tmp_path / "x.pdf")
     assert len(notas) == 1
+
+
+# --- reconciliacao contra o rodape (Quantidade de Notas / valor total) ---
+
+def test_le_sefaz_bem_formado_reconcilia_com_o_rodape(tmp_path):
+    pdf = tmp_path / "sefaz.pdf"
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), _linha(CHAVE_OK, "10,00"), *_rodape(2, "199,63")]])
+    _, notas = le_sefaz(pdf)
+    assert len(notas) == 2
+
+
+def test_le_sefaz_levanta_quando_a_chave_vem_partida_em_dois_tokens(tmp_path):
+    # mecanismo 1: a linha nao tem palavra de 44 digitos e sumiria sem erro
+    pdf = tmp_path / "sefaz.pdf"
+    partida = _linha(CHAVE_OK[:20] + " " + CHAVE_OK[20:])
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), partida, *_rodape(2, "379,26")]])
+    with pytest.raises(ValueError, match="Quantidade de Notas"):
+        le_sefaz(pdf)
+
+
+def test_le_sefaz_levanta_quando_nenhuma_linha_de_dados_e_lida(tmp_path):
+    pdf = tmp_path / "sefaz.pdf"
+    _gera_pdf(pdf, [CABECALHO + _rodape(0, "0,00")])
+    with pytest.raises(ValueError, match="nenhuma"):
+        le_sefaz(pdf)
+
+
+def test_le_sefaz_levanta_quando_o_valor_total_nao_fecha(tmp_path):
+    pdf = tmp_path / "sefaz.pdf"
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), *_rodape(1, "189,64")]])
+    with pytest.raises(ValueError, match="valor total"):
+        le_sefaz(pdf)
+
+
+def test_le_sefaz_levanta_sem_rodape(tmp_path):
+    pdf = tmp_path / "sefaz.pdf"
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK)]])
+    with pytest.raises(ValueError, match="rodape"):
+        le_sefaz(pdf)
+
+
+def _pdf_mock(palavras_pdf, texto):
+    from unittest.mock import MagicMock
+    pagina = MagicMock()
+    pagina.extract_words.return_value = palavras_pdf
+    pagina.extract_text.return_value = texto
+    pdf = MagicMock(pages=[pagina])
+    pdf.__enter__.return_value = pdf
+    return pdf
+
+
+def _palavras_em(top, textos, x_inicial=0):
+    return [
+        {"text": t, "x0": (x_inicial + i) * 10.0, "x1": (x_inicial + i) * 10.0 + 5.0, "top": top}
+        for i, t in enumerate(textos)
+    ]
+
+
+def test_parse_linha_levanta_com_duas_chaves_na_mesma_linha():
+    # mecanismo 2: duas notas fundidas num so cluster perderiam a segunda
+    linha = palavras(*(_linha(CHAVE_OK).split() + _linha(CHAVE_OK, "70,00").split()))
+    with pytest.raises(ValueError, match="mais de uma chave"):
+        parse_linha(linha)
+
+
+def test_le_sefaz_levanta_com_duas_linhas_fundidas_por_proximidade(tmp_path):
+    from unittest.mock import patch
+    a = _palavras_em(100.0, _linha(CHAVE_OK).split())
+    b = _palavras_em(101.0, _linha(CHAVE_OK, "70,00").split(), x_inicial=len(a))
+    pdf = _pdf_mock(a + b, chr(10).join(CABECALHO + _rodape(2, "259,63")))
+    with patch("conferencia.leitor_sefaz.pdfplumber.open", return_value=pdf):
+        with pytest.raises(ValueError):
+            le_sefaz(tmp_path / "x.pdf")
+
+
+def test_linhas_da_pagina_nao_encadeia_a_tolerancia():
+    from unittest.mock import MagicMock
+    from conferencia.leitor_sefaz import _linhas_da_pagina
+    pagina = MagicMock()
+    pagina.extract_words.return_value = [
+        {"text": str(i), "x0": i * 10.0, "x1": i * 10.0 + 5.0, "top": 100.0 + 1.5 * i}
+        for i in range(6)
+    ]
+    linhas = _linhas_da_pagina(pagina)
+    assert len(linhas) > 1  # tops de 100,0 a 107,5: nao e uma linha so
+    assert all(l[-1]["top"] - l[0]["top"] <= 2.0 for l in linhas)
