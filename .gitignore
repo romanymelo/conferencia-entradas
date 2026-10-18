@@ -1,0 +1,15 @@
+# Relatórios fiscais de clientes — NUNCA versionar
+entrada/
+saida/
+*.pdf
+*.xlsx
+
+# Fixtures de teste anonimizadas são a exceção
+!tests/fixtures/**/*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
