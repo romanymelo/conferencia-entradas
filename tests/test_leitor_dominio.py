@@ -175,3 +175,10 @@ def test_le_dominio_levanta_sem_total_geral(tmp_path):
     _gera_pdf(pdf, [CABECALHO + [BASE]])
     with pytest.raises(ValueError, match="Total Geral"):
         le_dominio(pdf)
+
+
+def test_le_cabecalho_levanta_com_cnpj_vazio_em_vez_de_zeros():
+    texto = ("101 - FARMACIA MODELO LTDA\nCNPJ:\n"
+             "Período: 01/09/2026 até 30/09/2026\n")
+    with pytest.raises(ValueError):
+        le_cabecalho(texto)

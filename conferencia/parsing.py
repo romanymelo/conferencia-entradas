@@ -6,7 +6,13 @@ _VALOR_BR = re.compile(r"^-?[\d.]+,\d{2}$")
 
 
 def normaliza_cnpj(texto: str) -> str:
-    return re.sub(r"\D", "", texto).zfill(14)
+    """So aceita CNPJ (14 digitos) ou CPF (11, completado com zeros). Qualquer outra
+    contagem e campo vazio ou lixo capturado: recusar, senao empresas diferentes
+    colapsariam em '00000000000000' e seriam pareadas entre si."""
+    digitos = re.sub(r"\D", "", texto)
+    if len(digitos) not in (11, 14):
+        raise ValueError(f"CNPJ/CPF invalido (esperado 11 ou 14 digitos): {texto!r}")
+    return digitos.zfill(14)
 
 
 def normaliza_numero(texto: str) -> int:

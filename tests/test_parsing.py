@@ -9,8 +9,8 @@ from conferencia.parsing import (
 def test_normaliza_cnpj_remove_formatacao():
     assert normaliza_cnpj("45.723.174/0011-92") == "45723174001192"
 
-def test_normaliza_cnpj_preenche_zeros_a_esquerda():
-    assert normaliza_cnpj("5.239.450/0024-84") == "05239450002484"
+def test_normaliza_cnpj_preenche_zeros_a_esquerda_do_cpf():
+    assert normaliza_cnpj("123.456.789-00") == "00012345678900"
 
 def test_normaliza_numero_descarta_zeros_a_esquerda():
     assert normaliza_numero("002019997") == 1004582
@@ -38,3 +38,9 @@ def test_parse_data_br():
 def test_parse_valor_br_rejeita_lixo(texto):
     with pytest.raises(ValueError):
         parse_valor_br(texto)
+
+
+@pytest.mark.parametrize("texto", ["", "   ", "CNPJ:", "1234567890123456", "5.239.450/0024-84", "1"])
+def test_normaliza_cnpj_recusa_quando_nao_tem_11_nem_14_digitos(texto):
+    with pytest.raises(ValueError):
+        normaliza_cnpj(texto)

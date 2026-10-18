@@ -257,3 +257,13 @@ def test_linhas_da_pagina_nao_encadeia_a_tolerancia():
     linhas = _linhas_da_pagina(pagina)
     assert len(linhas) > 1  # tops de 100,0 a 107,5: nao e uma linha so
     assert all(l[-1]["top"] - l[0]["top"] <= 2.0 for l in linhas)
+
+
+def test_le_cabecalho_levanta_com_cnpj_vazio_em_vez_de_zeros():
+    texto = (
+        "Período: 01/09/2026 - 30/09/2026\n"
+        "CNPJ:\n"
+        "Razão Social: FARMACIA MODELO LTDA\n"
+    )
+    with pytest.raises(ValueError):
+        le_cabecalho(texto)
