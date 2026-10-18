@@ -4,8 +4,8 @@ saida/
 *.pdf
 *.xlsx
 
-# Fixtures de teste anonimizadas são a exceção
-!tests/fixtures/**/*.pdf
+# Amostra real de cliente, usada pelo teste de ouro, nunca versionada
+tests/amostra/
 
 # Python
 __pycache__/
