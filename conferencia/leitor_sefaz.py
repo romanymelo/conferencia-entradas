@@ -90,9 +90,9 @@ def _linhas_da_pagina(pagina) -> list[list[dict]]:
 
 def _confere_rodape(texto: str, notas: list[NotaSefaz]) -> None:
     """Reconcilia o que foi lido com o que a Sefaz declara no rodape (spec 2.1).
-    Comparacao exata em Decimal: o total declarado e uma soma exata dos valores."""
-    if not notas:
-        raise ValueError("nenhuma linha de dados lida no relatorio da Sefaz")
+    Comparacao exata em Decimal: o total declarado e uma soma exata dos valores.
+    Relatorio sem notas e legitimo (rodape declara 0): so falha se o rodape declarar mais.
+    SUPOSICAO (amostra so tem notas Ativa): o total declarado inclui as canceladas."""
     rodapes = _RODAPE.findall(texto)
     if len(rodapes) != 1:
         raise ValueError(

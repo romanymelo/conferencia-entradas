@@ -142,6 +142,16 @@ def test_agrega_linhas_de_cfop_da_mesma_nota_e_fecha_com_a_sefaz(entrada, tmp_pa
     assert linha[Categoria.VALOR_DIVERGENTE] == 0
 
 
+def test_empresa_sem_notas_no_mes_com_relatorios_vazios_e_coerentes_sai_ok(entrada, tmp_path):
+    saida = tmp_path / "saida"
+    _sefaz(entrada / "s.pdf", [])
+    _dominio(entrada / "d.pdf", [])
+    assert executa(entrada, saida) == 0
+    [linha] = _resumo(saida)
+    assert linha["Status"] == Status.OK
+    assert linha["Qtd Sefaz"] == 0 and linha["Qtd Domínio"] == 0
+
+
 def test_sem_par_aparece_no_resumo_sem_pdf(entrada, tmp_path):
     saida = tmp_path / "saida"
     _sefaz(entrada / "s.pdf", [(100, "50,00")])

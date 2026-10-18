@@ -78,9 +78,8 @@ def parse_linha(texto: str) -> LancamentoDominio | None:
 
 def _confere_total_geral(texto: str, lancamentos: list[LancamentoDominio]) -> None:
     """Reconcilia a soma de todos os lancamentos (NF-e ou nao) com o Total Geral (spec 2.2).
-    Comparacao exata em Decimal: o Total Geral e uma soma exata dos Valores Contabeis."""
-    if not lancamentos:
-        raise ValueError("nenhuma linha de dados lida no relatorio do Dominio")
+    Comparacao exata em Decimal: o Total Geral e uma soma exata dos Valores Contabeis.
+    Relatorio sem lancamentos e legitimo (Total Geral 0,00): so falha se o total declarado for maior."""
     totais = _TOTAL_GERAL.findall(texto)
     if len(totais) != 1:
         raise ValueError(f"Total Geral do Dominio encontrado {len(totais)} vez(es); esperado 1")

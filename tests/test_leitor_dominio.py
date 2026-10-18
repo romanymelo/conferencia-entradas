@@ -163,10 +163,16 @@ def test_le_dominio_levanta_quando_uma_linha_de_dados_nao_e_reconhecida(tmp_path
         le_dominio(pdf)
 
 
-def test_le_dominio_levanta_quando_nenhuma_linha_de_dados_e_lida(tmp_path):
+def test_le_dominio_sem_lancamentos_com_total_geral_zerado_e_lido_com_sucesso(tmp_path):
     pdf = tmp_path / "dominio.pdf"
     _gera_pdf(pdf, [CABECALHO + ["Total Geral 0,00"]])
-    with pytest.raises(ValueError, match="nenhum"):
+    assert le_dominio(pdf)[1] == []
+
+
+def test_le_dominio_levanta_quando_total_geral_declara_valor_e_nada_foi_lido(tmp_path):
+    pdf = tmp_path / "dominio.pdf"
+    _gera_pdf(pdf, [CABECALHO + ["Total Geral 128.450,60"]])
+    with pytest.raises(ValueError, match="Total Geral"):
         le_dominio(pdf)
 
 

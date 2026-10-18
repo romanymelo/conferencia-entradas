@@ -191,10 +191,16 @@ def test_le_sefaz_levanta_quando_a_chave_vem_partida_em_dois_tokens(tmp_path):
         le_sefaz(pdf)
 
 
-def test_le_sefaz_levanta_quando_nenhuma_linha_de_dados_e_lida(tmp_path):
+def test_le_sefaz_sem_notas_com_rodape_zerado_e_lido_com_sucesso(tmp_path):
     pdf = tmp_path / "sefaz.pdf"
     _gera_pdf(pdf, [CABECALHO + _rodape(0, "0,00")])
-    with pytest.raises(ValueError, match="nenhuma"):
+    assert le_sefaz(pdf)[1] == []
+
+
+def test_le_sefaz_levanta_quando_rodape_declara_notas_e_nenhuma_foi_lida(tmp_path):
+    pdf = tmp_path / "sefaz.pdf"
+    _gera_pdf(pdf, [CABECALHO + _rodape(204, "124.155,05")])
+    with pytest.raises(ValueError, match="Quantidade de Notas"):
         le_sefaz(pdf)
 
 
