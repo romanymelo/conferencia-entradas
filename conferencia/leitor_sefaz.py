@@ -1,6 +1,5 @@
 import logging
 import re
-from collections import defaultdict
 from pathlib import Path
 
 import pdfplumber
@@ -14,7 +13,9 @@ log = logging.getLogger(__name__)
 
 _CHAVE = re.compile(r"\d{44}")
 _DATA = re.compile(r"\d{2}/\d{2}/\d{4}")
-_CNPJ = re.compile(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}")
+_CNPJ_CPF = re.compile(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2}")
+_SITUACOES = {"Ativa", "Cancelada"}
+_TOLERANCIA_TOP = 2.0  # pt: palavras de uma mesma linha visual
 _PERIODO = re.compile(r"Período:\s*(\d{2}/\d{2}/\d{4})\s*-\s*(\d{2}/\d{2}/\d{4})")
 _CNPJ_ROTULO = re.compile(r"^CNPJ:\s*(\S+)", re.MULTILINE)
 _RAZAO_ROTULO = re.compile(r"^Razão Social:\s*(.+?)\s*$", re.MULTILINE)
@@ -54,8 +55,10 @@ def parse_linha(palavras: list[dict]) -> NotaSefaz | None:
         return None
     k = achados[0]
     # layout: data hora cnpj nome... serie / numero chave tipo situacao valor
-    if k < 6 or len(textos) < k + 4 or not _DATA.fullmatch(textos[0]) or not _CNPJ.fullmatch(textos[2]):
+    if k < 6 or len(textos) < k + 4 or not _DATA.fullmatch(textos[0]) or not _CNPJ_CPF.fullmatch(textos[2]):
         raise ValueError(f"linha de dados fora do layout esperado: {' '.join(textos)!r}")
+    if textos[k + 2] not in _SITUACOES:
+        raise ValueError(f"situacao inesperada {textos[k + 2]!r}: {' '.join(textos)!r}")
     return NotaSefaz(
         cnpj_emitente=normaliza_cnpj(textos[2]),
         nome_emitente=" ".join(textos[3:k - 3]),
@@ -69,10 +72,15 @@ def parse_linha(palavras: list[dict]) -> NotaSefaz | None:
 
 
 def _linhas_da_pagina(pagina) -> list[list[dict]]:
-    por_top = defaultdict(list)
-    for p in pagina.extract_words():
-        por_top[round(p["top"])].append(p)
-    return [por_top[top] for top in sorted(por_top)]
+    """Agrupa palavras por proximidade vertical (tolerancia, nao arredondamento)."""
+    linhas: list[list[dict]] = []
+    ultimo_top = None
+    for p in sorted(pagina.extract_words(), key=lambda p: p["top"]):
+        if ultimo_top is None or p["top"] - ultimo_top > _TOLERANCIA_TOP:
+            linhas.append([])
+        linhas[-1].append(p)
+        ultimo_top = p["top"]
+    return linhas
 
 
 def le_sefaz(caminho: Path) -> tuple[Cabecalho, list[NotaSefaz]]:
@@ -84,11 +92,12 @@ def le_sefaz(caminho: Path) -> tuple[Cabecalho, list[NotaSefaz]]:
                 nota = parse_linha(linha)
                 if nota is None:
                     continue
-                esperado = (nota.cnpj_emitente, nota.serie, nota.numero)
-                if decompoe_chave(nota.chave) != esperado:
+                lido = (nota.cnpj_emitente, nota.serie, nota.numero)
+                da_chave = decompoe_chave(nota.chave)
+                if da_chave != lido:
                     log.warning(
-                        "chave %s diverge da linha lida (cnpj, serie, numero) = %s",
-                        nota.chave, esperado,
+                        "chave %s diverge da linha: linha (cnpj, serie, numero) = %s; chave = %s",
+                        nota.chave, lido, da_chave,
                     )
                 notas.append(nota)
     return cabecalho, notas

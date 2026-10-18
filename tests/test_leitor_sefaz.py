@@ -2,6 +2,8 @@ import logging
 from datetime import date
 from decimal import Decimal
 import pytest
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.pdfgen import canvas
 from conferencia.leitor_sefaz import (
     decompoe_chave, e_sefaz, le_cabecalho, le_sefaz, parse_linha,
 )
@@ -85,8 +87,6 @@ CHAVE_OK = "27260911222333000144550010000000991066378260"  # cnpj 11222333000144
 
 
 def _gera_pdf(caminho, paginas):
-    from reportlab.lib.pagesizes import landscape, A4
-    from reportlab.pdfgen import canvas
     c = canvas.Canvas(str(caminho), pagesize=landscape(A4))
     for linhas in paginas:
         y = 550
@@ -132,3 +132,38 @@ def test_le_sefaz_avisa_divergencia_da_chave_sem_interromper(tmp_path, caplog):
     assert len(notas) == 2
     avisos = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(avisos) == 1 and chave_ruim in avisos[0].getMessage()
+
+
+def test_parse_linha_aceita_emissor_cpf_com_14_digitos():
+    linha = palavras(
+        "01/09/2026", "08:52:43", "123.456.789-00", "PRODUTOR", "RURAL",
+        "1", "/", "5", "4" * 44, "Saída", "Ativa", "10,00",
+    )
+    assert parse_linha(linha).cnpj_emitente == "00012345678900"
+
+
+def test_parse_linha_rejeita_situacao_desconhecida():
+    linha = palavras(
+        "01/09/2026", "08:52:43", "11.222.333/0001-44", "FORNECEDOR",
+        "1", "/", "5", "4" * 44, "Saída", "Ativa", "10,00",
+    )
+    linha[-2]["text"] = "Xyz"
+    with pytest.raises(ValueError):
+        parse_linha(linha)
+
+
+def test_le_sefaz_agrupa_linha_com_tops_proximos_em_fronteira_de_arredondamento(tmp_path):
+    from unittest.mock import MagicMock, patch
+    textos = _linha(CHAVE_OK).split()
+    palavras_pdf = [
+        {"text": t, "x0": i * 10.0, "x1": i * 10.0 + 5.0, "top": 100.4 if i % 2 else 100.6}
+        for i, t in enumerate(textos)
+    ]
+    pagina = MagicMock()
+    pagina.extract_words.return_value = palavras_pdf
+    pagina.extract_text.return_value = chr(10).join(CABECALHO)
+    pdf = MagicMock(pages=[pagina])
+    pdf.__enter__.return_value = pdf
+    with patch("conferencia.leitor_sefaz.pdfplumber.open", return_value=pdf):
+        _, notas = le_sefaz(tmp_path / "x.pdf")
+    assert len(notas) == 1
