@@ -44,3 +44,15 @@ def test_conjunto_de_especies_e_configuravel():
 
 def test_lista_vazia():
     assert agrega_dominio([]) == ([], [])
+
+def test_mesmo_numero_em_series_distintas_nao_e_somado():
+    # series distintas sao notas distintas; a quebra por CFOP sempre repete a serie
+    linhas = [
+        lanc(numero=111, serie="1", valor_contabil=Decimal("10.00")),
+        lanc(numero=111, serie="2", valor_contabil=Decimal("20.00")),
+    ]
+    notas, _ = agrega_dominio(linhas)
+    assert len(notas) == 2
+    assert {n.serie: n.valor_contabil for n in notas} == {
+        "1": Decimal("10.00"), "2": Decimal("20.00"),
+    }
