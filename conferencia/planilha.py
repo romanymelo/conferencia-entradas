@@ -4,7 +4,9 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from conferencia.modelo import CATEGORIAS_ERRO, Categoria, ResultadoEmpresa
+from conferencia.modelo import (
+    CATEGORIAS_ALERTA, CATEGORIAS_ERRO, CATEGORIAS_INFORMATIVA, Categoria, ResultadoEmpresa,
+)
 
 FORMATO_MOEDA = "#,##0.00"
 FORMATO_DATA = "dd/mm/yyyy"
@@ -16,7 +18,8 @@ CATEGORIAS = [
 
 CABECALHO_RESUMO = [
     "Código", "CNPJ", "Razão Social", "Status", "Erros", "Alertas", *CATEGORIAS,
-    "Qtd Sefaz", "Total Sefaz", "Qtd Domínio", "Total Domínio", "Diferença", "Período",
+    "Qtd Sefaz", "Total Sefaz", "Qtd Domínio", "Total Domínio", "Diferença",
+    "Informativos", "Período",
     "Observação",
 ]
 CABECALHO_DETALHE = [
@@ -71,15 +74,17 @@ def escreve_planilha(resultados: list[ResultadoEmpresa], destino: Path) -> None:
             if r.empresa else None
         )
         erros = sum(1 for o in r.ocorrencias if o.categoria in CATEGORIAS_ERRO)
+        alertas = sum(1 for o in r.ocorrencias if o.categoria in CATEGORIAS_ALERTA)
+        informativos = sum(1 for o in r.ocorrencias if o.categoria in CATEGORIAS_INFORMATIVA)
         por_categoria = [
             sum(1 for o in r.ocorrencias if o.categoria == c) for c in CATEGORIAS
         ]
         resumo.append([
-            codigo, cnpj, razao, r.status, erros, len(r.ocorrencias) - erros,
+            codigo, cnpj, razao, r.status, erros, alertas,
             *por_categoria,
             r.qtd_sefaz, _dinheiro(r.total_sefaz), r.qtd_dominio,
             _dinheiro(r.total_dominio), _diferenca(r.total_sefaz, r.total_dominio),
-            periodo, r.erro,
+            informativos, periodo, r.erro,
         ])
         for o in r.ocorrencias:
             detalhe.append([

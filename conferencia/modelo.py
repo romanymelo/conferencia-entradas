@@ -25,6 +25,12 @@ class Status:
 CATEGORIAS_ERRO: frozenset[str] = frozenset(
     {Categoria.FALTANDO, Categoria.CANCELADA_NAO_ZERADA}
 )
+CATEGORIAS_ALERTA: frozenset[str] = frozenset(
+    {Categoria.VALOR_DIVERGENTE, Categoria.SOBRANDO, Categoria.AMBIGUO}
+)
+CATEGORIAS_INFORMATIVA: frozenset[str] = frozenset(
+    {Categoria.FORA_DO_PERIODO, Categoria.NAO_NFE}
+)
 ESPECIES_NFE: frozenset[int] = frozenset({36})
 TOLERANCIA: Decimal = Decimal("0.01")
 

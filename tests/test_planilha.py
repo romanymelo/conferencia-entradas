@@ -59,7 +59,8 @@ def test_resumo_separa_erros_de_alertas_e_conta_por_categoria(tmp_path, resultad
     escreve_planilha([resultado_divergente], destino)
     linha = _linhas(load_workbook(destino)["Resumo"])[0]
     assert linha["Erros"] == 1  # FALTANDO
-    assert linha["Alertas"] == 1  # NÃO-NFe
+    assert linha["Alertas"] == 0  # NÃO-NFe e informativo, nao alerta (spec 3.6)
+    assert linha["Informativos"] == 1  # NÃO-NFe
     assert linha[Categoria.FALTANDO] == 1
     assert linha[Categoria.NAO_NFE] == 1
     assert linha[Categoria.SOBRANDO] == 0
@@ -107,7 +108,17 @@ def test_resumo_mostra_o_periodo_e_deixa_vazio_sem_empresa(tmp_path, resultados_
     destino = tmp_path / "r.xlsx"
     escreve_planilha(resultados_exemplo, destino)
     cab = [c.value for c in load_workbook(destino)["Resumo"][1]]
-    assert cab[-2:] == ["Período", "Observação"]
+    assert cab[-3:] == ["Informativos", "Período", "Observação"]
     linhas = _linhas(load_workbook(destino)["Resumo"])
     assert linhas[0]["Período"] == "01/09/2026 a 30/09/2026"
     assert linhas[2]["Período"] is None
+
+
+def test_resumo_conta_como_alerta_so_as_categorias_de_alerta(tmp_path, resultado_divergente):
+    from dataclasses import replace
+    sobrando = replace(resultado_divergente.ocorrencias[0], categoria=Categoria.SOBRANDO)
+    r = replace(resultado_divergente, ocorrencias=[*resultado_divergente.ocorrencias, sobrando])
+    destino = tmp_path / "r.xlsx"
+    escreve_planilha([r], destino)
+    linha = _linhas(load_workbook(destino)["Resumo"])[0]
+    assert (linha["Erros"], linha["Alertas"], linha["Informativos"]) == (1, 1, 1)

@@ -7,15 +7,17 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from conferencia.modelo import CATEGORIAS_ERRO, Categoria, Empresa, Ocorrencia, ResultadoEmpresa
+from conferencia.modelo import (
+    CATEGORIAS_ALERTA, CATEGORIAS_ERRO, CATEGORIAS_INFORMATIVA, Empresa, Ocorrencia, ResultadoEmpresa,
+)
 
 CENTAVO = Decimal("0.01")
 LIMITE_NOME = 80
 
 BLOCOS = [
     ("Erros", CATEGORIAS_ERRO),
-    ("Alertas", {Categoria.VALOR_DIVERGENTE, Categoria.SOBRANDO, Categoria.AMBIGUO}),
-    ("Informativos", {Categoria.FORA_DO_PERIODO, Categoria.NAO_NFE}),
+    ("Alertas", CATEGORIAS_ALERTA),
+    ("Informativos", CATEGORIAS_INFORMATIVA),
 ]
 
 RODAPE = (
