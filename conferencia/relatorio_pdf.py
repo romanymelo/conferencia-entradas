@@ -5,10 +5,9 @@ from pathlib import Path
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from conferencia.modelo import CATEGORIAS_ERRO, Categoria, Ocorrencia, ResultadoEmpresa
+from conferencia.modelo import CATEGORIAS_ERRO, Categoria, Empresa, Ocorrencia, ResultadoEmpresa
 
 CENTAVO = Decimal("0.01")
 LIMITE_NOME = 80
@@ -31,7 +30,7 @@ CABECALHO_TABELA = [
 ]
 # Soma 800 pt, dentro dos 802 pt úteis do A4 paisagem com margens de 20 pt.
 # A chave (44 dígitos em Courier 7 pt = ~185 pt) cabe folgada em 200 pt.
-LARGURAS = [80, 80, 156, 48, 50, 64, 64, 58, 200]
+LARGURAS = [80, 80, 144, 60, 50, 64, 64, 58, 200]
 
 MARGEM = 20
 MARGEM_INFERIOR = 42
@@ -43,8 +42,28 @@ ESTILO_RODAPE = ParagraphStyle(
 )
 
 
+def _exige_empresa(resultado: ResultadoEmpresa) -> Empresa:
+    if resultado.empresa is None:
+        raise ValueError("Resultado sem empresa não gera relatório PDF")
+    return resultado.empresa
+
+
+def _documento(digitos: str) -> str:
+    """Formata CNPJ (14 dígitos) ou CPF zero-preenchido a 14; outro tamanho fica como veio."""
+    if len(digitos) != 14 or not digitos.isdigit():
+        return digitos
+    if digitos.startswith("000"):
+        d = digitos[3:]
+        return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+    return f"{digitos[:2]}.{digitos[2:5]}.{digitos[5:8]}/{digitos[8:12]}-{digitos[12:]}"
+
+
+def _serie_numero(o: Ocorrencia) -> str:
+    return f"{o.serie}/{o.numero}" if o.serie else str(o.numero)
+
+
 def nome_arquivo(resultado: ResultadoEmpresa) -> str:
-    empresa = resultado.empresa
+    empresa = _exige_empresa(resultado)
     razao = re.sub(r"[^A-Za-z0-9 ._-]", "_", empresa.razao_social)
     razao = re.sub(r"\s+", "_", razao.strip())
     return f"{empresa.codigo}_{razao}"[:LIMITE_NOME] + ".pdf"
@@ -70,9 +89,9 @@ def _escapa(texto: str) -> str:
 def _linha(o: Ocorrencia) -> list:
     return [
         Paragraph(_escapa(o.categoria), ESTILO_CELULA),
-        o.cnpj_emitente,
+        _documento(o.cnpj_emitente),
         Paragraph(_escapa(o.nome_emitente), ESTILO_CELULA),
-        f"{o.serie}/{o.numero}",
+        Paragraph(_escapa(_serie_numero(o)), ESTILO_CELULA),
         o.data_emissao.strftime("%d/%m/%Y"),
         _dinheiro(o.valor_sefaz),
         _dinheiro(o.valor_dominio),
@@ -110,13 +129,13 @@ def _rodape(canvas, doc) -> None:
 
 
 def escreve_relatorio(resultado: ResultadoEmpresa, destino: Path) -> None:
-    empresa = resultado.empresa
-    estilos = getSampleStyleSheet()
+    empresa = _exige_empresa(resultado)
+    estilos = _estilos
     cabecalho = ParagraphStyle("cab", parent=estilos["Normal"], fontSize=9, leading=12)
     historia = [
         Paragraph(f"{empresa.codigo} - {_escapa(empresa.razao_social)}", estilos["Title"]),
         Paragraph(
-            f"CNPJ {empresa.cnpj} | Período "
+            f"CNPJ {_documento(empresa.cnpj)} | Período "
             f"{empresa.periodo_inicio:%d/%m/%Y} a {empresa.periodo_fim:%d/%m/%Y} | "
             f"Status: <b>{_escapa(resultado.status)}</b>",
             cabecalho,
@@ -135,6 +154,10 @@ def escreve_relatorio(resultado: ResultadoEmpresa, destino: Path) -> None:
             "Nenhuma ocorrência encontrada entre a Sefaz e o Domínio.",
             estilos["Normal"],
         ))
+    classificadas = set().union(*(c for _, c in BLOCOS))
+    sem_bloco = {o.categoria for o in resultado.ocorrencias} - classificadas
+    if sem_bloco:
+        raise ValueError(f"Categoria sem bloco no relatório: {sorted(sem_bloco)}")
     for titulo, categorias in BLOCOS:
         do_bloco = [o for o in resultado.ocorrencias if o.categoria in categorias]
         if not do_bloco:

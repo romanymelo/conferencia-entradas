@@ -1,6 +1,8 @@
+from dataclasses import replace
 from datetime import date
 
 import pdfplumber
+import pytest
 
 from conferencia.modelo import Empresa, Status
 from conferencia.relatorio_pdf import escreve_relatorio, nome_arquivo
@@ -17,7 +19,7 @@ def test_nome_arquivo_sanitiza_caractere_invalido_no_windows(resultado_divergent
         date(2026, 9, 1), date(2026, 9, 30),
     )
     nome = nome_arquivo(resultado_divergente)
-    assert not set(nome) & set('<>:"/\|?*&')
+    assert not set(nome) & set(r'<>:"/\|?*&')
     assert nome.startswith("18_") and nome.endswith(".pdf")
 
 
@@ -55,10 +57,70 @@ def test_relatorio_e_paisagem_a4(tmp_path, resultado_divergente):
 
 
 def test_relatorio_nao_lista_notas_conferidas(tmp_path, resultado_divergente):
+    # a nota 9999 foi conferida sem divergencia: nao esta nas ocorrencias
     destino = tmp_path / "r.pdf"
     escreve_relatorio(resultado_divergente, destino)
     texto = texto_do_pdf(destino)
-    assert str(len(resultado_divergente.ocorrencias)) in texto
+    assert "1/9999" not in texto and "9999" not in texto
+    for o in resultado_divergente.ocorrencias:
+        assert str(o.numero) in texto
+
+
+def test_cabecalho_traz_empresa_periodo_quantidades_e_totais(tmp_path, resultado_divergente):
+    destino = tmp_path / "r.pdf"
+    escreve_relatorio(resultado_divergente, destino)
+    texto = texto_do_pdf(destino)
+    assert "701" in texto and "EMPRESA COM ERRO LTDA" in texto
+    assert "44.555.666/0001-72" in texto
+    assert "01/09/2026 a 30/09/2026" in texto
+    assert "Sefaz: 5 notas, R$ 2.000,00" in texto
+    assert "Domínio: 5 notas, R$ 1.829,25" in texto
+
+
+def test_cnpj_emitente_formatado_e_cpf_nao_vira_cnpj(tmp_path, resultado_divergente):
+    resultado_divergente.ocorrencias[1] = replace(
+        resultado_divergente.ocorrencias[1], cnpj_emitente="00012345678900"
+    )
+    destino = tmp_path / "r.pdf"
+    escreve_relatorio(resultado_divergente, destino)
+    texto = texto_do_pdf(destino)
+    assert "45.723.174/0011-92" in texto
+    assert "123.456.789-00" in texto
+    assert "00.012.345/6789-00" not in texto
+
+
+def test_serie_vazia_mostra_so_o_numero(tmp_path, resultado_divergente):
+    resultado_divergente.ocorrencias[1] = replace(
+        resultado_divergente.ocorrencias[1], serie="", numero=6100244
+    )
+    destino = tmp_path / "r.pdf"
+    escreve_relatorio(resultado_divergente, destino)
+    texto = texto_do_pdf(destino)
+    assert "6100244" in texto and "/6100244" not in texto
+
+
+def test_serie_e_numero_longos_nao_invadem_a_coluna_seguinte(tmp_path, resultado_divergente):
+    resultado_divergente.ocorrencias[0] = replace(
+        resultado_divergente.ocorrencias[0], serie="999", numero=999999999
+    )
+    destino = tmp_path / "r.pdf"
+    escreve_relatorio(resultado_divergente, destino)
+    assert "999/999999999" in texto_do_pdf(destino)
+
+
+def test_resultado_sem_empresa_levanta_erro_claro(tmp_path, resultado_sem_par):
+    with pytest.raises(ValueError, match="sem empresa"):
+        nome_arquivo(resultado_sem_par)
+    with pytest.raises(ValueError, match="sem empresa"):
+        escreve_relatorio(resultado_sem_par, tmp_path / "x.pdf")
+
+
+def test_categoria_sem_bloco_nao_some_em_silencio(tmp_path, resultado_divergente):
+    resultado_divergente.ocorrencias[0] = replace(
+        resultado_divergente.ocorrencias[0], categoria="INEXISTENTE"
+    )
+    with pytest.raises(ValueError, match="INEXISTENTE"):
+        escreve_relatorio(resultado_divergente, tmp_path / "x.pdf")
 
 
 def test_blocos_na_ordem_com_contagem_no_titulo(tmp_path, resultado_divergente):
