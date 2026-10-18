@@ -5,7 +5,7 @@ import pdfplumber
 import pytest
 
 from conferencia.modelo import Empresa, Status
-from conferencia.relatorio_pdf import escreve_relatorio, nome_arquivo
+from conferencia.relatorio_pdf import _documento, escreve_relatorio, nome_arquivo
 
 
 def texto_do_pdf(caminho):
@@ -79,14 +79,14 @@ def test_cabecalho_traz_empresa_periodo_quantidades_e_totais(tmp_path, resultado
 
 def test_cnpj_emitente_formatado_e_cpf_nao_vira_cnpj(tmp_path, resultado_divergente):
     resultado_divergente.ocorrencias[1] = replace(
-        resultado_divergente.ocorrencias[1], cnpj_emitente="00012345678900"
+        resultado_divergente.ocorrencias[1], cnpj_emitente="00052998224725"  # CPF fabricado para teste, DV valido
     )
     destino = tmp_path / "r.pdf"
     escreve_relatorio(resultado_divergente, destino)
     texto = texto_do_pdf(destino)
     assert "45.723.174/0011-92" in texto
-    assert "123.456.789-00" in texto
-    assert "00.012.345/6789-00" not in texto
+    assert "529.982.247-25" in texto
+    assert "00.052.998/2247-25" not in texto
 
 
 def test_serie_vazia_mostra_so_o_numero(tmp_path, resultado_divergente):
@@ -160,3 +160,17 @@ def test_relatorio_exibe_o_status(tmp_path, resultado_divergente):
     destino = tmp_path / "r.pdf"
     escreve_relatorio(resultado_divergente, destino)
     assert Status.DIVERGENTE in texto_do_pdf(destino)
+
+
+def test_documento_cnpj_comecando_em_zeros_nao_vira_cpf():
+    assert _documento("00000000000191") == "00.000.000/0001-91"  # Banco do Brasil
+    assert _documento("00012345000199") == "00.012.345/0001-99"
+
+
+def test_documento_cpf_zero_preenchido_com_dv_valido():
+    assert _documento("00052998224725") == "529.982.247-25"  # CPF fabricado para teste
+
+
+def test_documento_cnpj_comum_e_tamanho_estranho():
+    assert _documento("45723174001192") == "45.723.174/0011-92"
+    assert _documento("123") == "123"

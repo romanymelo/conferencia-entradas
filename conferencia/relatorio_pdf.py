@@ -48,11 +48,40 @@ def _exige_empresa(resultado: ResultadoEmpresa) -> Empresa:
     return resultado.empresa
 
 
+def _cpf_valido(cpf: str) -> bool:
+    if len(cpf) != 11 or len(set(cpf)) == 1:
+        return False
+    for tamanho in (9, 10):
+        soma = sum(int(d) * peso for d, peso in zip(cpf, range(tamanho + 1, 1, -1)))
+        if int(cpf[tamanho]) != (soma * 10 % 11) % 10:
+            return False
+    return True
+
+
+def _cnpj_valido(cnpj: str) -> bool:
+    if len(cnpj) != 14 or len(set(cnpj)) == 1:
+        return False
+    for tamanho in (12, 13):
+        pesos = [*range(tamanho - 7, 1, -1), *range(9, 1, -1)][:tamanho]
+        soma = sum(int(d) * p for d, p in zip(cnpj, pesos))
+        resto = soma % 11
+        if int(cnpj[tamanho]) != (0 if resto < 2 else 11 - resto):
+            return False
+    return True
+
+
 def _documento(digitos: str) -> str:
-    """Formata CNPJ (14 dígitos) ou CPF zero-preenchido a 14; outro tamanho fica como veio."""
+    """Formata CNPJ ou CPF zero-preenchido a 14 dígitos; outro tamanho fica como veio.
+
+    CNPJ com DV válido é sempre CNPJ (o do Banco do Brasil, 00000000000191, também passa
+    como CPF por coincidência). É CPF só quando começa com 000, os 11 finais têm DV de CPF
+    válido e o conjunto não é CNPJ válido. Risco aceito: um CNPJ iniciado em 000, com DV
+    inválido (dado malformado) mas cujos 11 finais formem um CPF válido, sai como CPF.
+    É raro demais para justificar mais complexidade.
+    """
     if len(digitos) != 14 or not digitos.isdigit():
         return digitos
-    if digitos.startswith("000"):
+    if digitos.startswith("000") and not _cnpj_valido(digitos) and _cpf_valido(digitos[3:]):
         d = digitos[3:]
         return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
     return f"{digitos[:2]}.{digitos[2:5]}.{digitos[5:8]}/{digitos[8:12]}-{digitos[12:]}"
