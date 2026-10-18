@@ -101,3 +101,13 @@ def test_primeira_linha_congelada_e_autofiltro_nas_duas_abas(tmp_path, resultado
     for nome in ("Resumo", "Detalhe"):
         assert wb[nome].freeze_panes == "A2"
         assert wb[nome].auto_filter.ref is not None
+
+
+def test_resumo_mostra_o_periodo_e_deixa_vazio_sem_empresa(tmp_path, resultados_exemplo):
+    destino = tmp_path / "r.xlsx"
+    escreve_planilha(resultados_exemplo, destino)
+    cab = [c.value for c in load_workbook(destino)["Resumo"][1]]
+    assert cab[-2:] == ["Período", "Observação"]
+    linhas = _linhas(load_workbook(destino)["Resumo"])
+    assert linhas[0]["Período"] == "01/09/2026 a 30/09/2026"
+    assert linhas[2]["Período"] is None

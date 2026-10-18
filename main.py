@@ -12,6 +12,7 @@ from conferencia.planilha import escreve_planilha
 from conferencia.relatorio_pdf import escreve_relatorio, nome_arquivo
 
 LIMITE_CODIGO_SAIDA = 125
+CODIGO_ENTRADA_INVALIDA = 2  # reservado; 1 já significa "1 empresa divergente"
 
 
 def _erro_leitura(erro: str) -> ResultadoEmpresa:
@@ -20,8 +21,8 @@ def _erro_leitura(erro: str) -> ResultadoEmpresa:
     )
 
 
-def _confere_par(par: Par, pasta: Path) -> ResultadoEmpresa:
-    """Lê os dois PDFs, confere e grava o PDF da empresa. Falha de leitura sobe de
+def _confere_par(par: Par) -> ResultadoEmpresa:
+    """Lê os dois PDFs e confere. Falha de leitura sobe de
     propósito: dado parcial nunca vira conferência (nota pulada não poderia ser FALTANDO)."""
     _, notas_sefaz = leitor_sefaz.le_sefaz(par.caminho_sefaz)
     _, lancamentos = leitor_dominio.le_dominio(par.caminho_dominio)
@@ -38,7 +39,6 @@ def _confere_par(par: Par, pasta: Path) -> ResultadoEmpresa:
         total_dominio=sum((n.valor_contabil for n in notas_dominio), Decimal("0")),
         erro=None,
     )
-    escreve_relatorio(resultado, pasta / nome_arquivo(resultado))
     return resultado
 
 
@@ -72,35 +72,45 @@ def executa(entrada: Path, saida: Path) -> int:
 
     # O mês vem do período declarado; vale o do primeiro arquivo quando há mais de um.
     if identificados:
-        pasta = saida / f"{identificados[0].cabecalho.periodo_inicio:%Y-%m}"
+        mes = f"{identificados[0].cabecalho.periodo_inicio:%Y-%m}"
+        pasta = saida / mes
+        nome_planilha = f"resumo_conferencia_{mes}.xlsx"
         meses = {a.cabecalho.periodo_inicio.strftime("%Y-%m") for a in identificados}
         if len(meses) > 1:
             anota(f"AVISO: períodos de meses diferentes; saída em {pasta}")
     else:
         pasta = saida
+        nome_planilha = "resumo_conferencia.xlsx"
     pasta.mkdir(parents=True, exist_ok=True)
 
     resultados: list[ResultadoEmpresa] = []
     for par in pares:
         rotulo = f"{par.empresa.codigo} - {par.empresa.razao_social}"
         try:
-            resultado = _confere_par(par, pasta)
+            resultado = _confere_par(par)
         except Exception as e:
             erro = f"{rotulo}: falha ao ler {par.caminho_sefaz} / {par.caminho_dominio}: {e}"
             anota(f"ERRO {erro}")
             resultados.append(_erro_leitura(erro))
             continue
+        try:
+            escreve_relatorio(resultado, pasta / nome_arquivo(resultado))
+        except Exception as e:
+            # a conferência está válida e entra na planilha; só o PDF falhou
+            anota(f"ERRO ao gravar o PDF de {rotulo}: {e}")
+            resultado.erro = f"conferência feita, mas o PDF não foi gravado: {e}"
         anota(f"{rotulo}: {resultado.status} ({len(resultado.ocorrencias)} ocorrências)")
         resultados.append(resultado)
     for problema in problemas:
         anota(f"{problema.status}: {problema.erro}")
     resultados += problemas + falhas
 
-    escreve_planilha(resultados, pasta / "conferencia.xlsx")
     divergentes = sum(1 for r in resultados if r.status == Status.DIVERGENTE)
     anota(f"{len(resultados)} linha(s) no Resumo, {divergentes} divergente(s), "
           f"{time.monotonic() - inicio:.1f}s")
+    # log primeiro: com a planilha aberta no Excel, escreve_planilha levanta PermissionError
     (pasta / "log_execucao.txt").write_text("\n".join(log) + "\n", encoding="utf-8")
+    escreve_planilha(resultados, pasta / nome_planilha)
     return divergentes
 
 
@@ -109,4 +119,8 @@ if __name__ == "__main__":
     ap.add_argument("--entrada", type=Path, default=Path("entrada"))
     ap.add_argument("--saida", type=Path, default=Path("saida"))
     args = ap.parse_args()
-    sys.exit(min(executa(args.entrada, args.saida), LIMITE_CODIGO_SAIDA))
+    try:
+        sys.exit(min(executa(args.entrada, args.saida), LIMITE_CODIGO_SAIDA))
+    except NotADirectoryError as e:
+        print(f"ERRO: {e}", file=sys.stderr)
+        sys.exit(CODIGO_ENTRADA_INVALIDA)

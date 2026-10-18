@@ -23,7 +23,8 @@ python main.py
 python main.py --entrada outra_pasta --saida outra_saida
 ```
 
-O código de saída é a quantidade de empresas `DIVERGENTE` (no máximo 125).
+O código de saída é a quantidade de empresas `DIVERGENTE` (no máximo 125); 2 é reservado
+para pasta de entrada inexistente.
 PDFs que não são relatórios da Sefaz nem do Domínio são ignorados e registrados
 no log.
 
@@ -31,8 +32,11 @@ no log.
 
 O mês vem do período declarado nos relatórios, não da data de hoje.
 
-- `conferencia.xlsx`: aba `Resumo` (uma linha por empresa, inclusive as corretas
+- `resumo_conferencia_<AAAA-MM>.xlsx` (sem nenhum relatório identificado, `resumo_conferencia.xlsx` direto em `saida/`): aba `Resumo` (uma linha por empresa, inclusive as corretas
   e as com problema de arquivo) e aba `Detalhe` (uma linha por ocorrência).
+  A coluna `Diferença` costuma ser diferente de zero mesmo em empresa `OK`, porque
+  corresponde às notas `FORA DO PERÍODO` (na 101, −2.815,35 com status `OK`). A
+  coluna `Período` mostra o período de cada empresa conferida.
 - Um PDF por empresa conferida, `<código>_<razão social>.pdf`, inclusive as sem
   divergência (serve de comprovante). Contém só as ocorrências, com a chave de
   acesso.

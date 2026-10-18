@@ -99,10 +99,12 @@ def test_empresa_divergente_gera_pdf_planilha_e_log(entrada, tmp_path):
 
     # subdiretório vem do período declarado, não da data de hoje
     pasta = saida / "2026-09"
+    assert (pasta / "resumo_conferencia_2026-09.xlsx").is_file()
     assert [p.name for p in pasta.glob("101_*.pdf")] == ["101_FARMACIA_MODELO_LTDA.pdf"]
     [linha] = _resumo(saida)
     assert linha["Código"] == "101" and linha["Status"] == Status.DIVERGENTE
     assert linha[Categoria.FALTANDO] == 1
+    assert linha["Período"] == "01/09/2026 a 30/09/2026"
     assert linha["Qtd Sefaz"] == 2 and linha["Qtd Domínio"] == 1
     assert Decimal(str(linha["Total Sefaz"])) == Decimal("120.00")
     log = _log(saida)
@@ -205,3 +207,33 @@ def test_gera_pdf_para_a_empresa_conferida(pasta_amostra):
     entrada, saida = pasta_amostra
     executa(entrada, saida)
     assert [p.name for p in saida.rglob("101_*.pdf")]
+
+
+def test_falha_ao_gravar_pdf_preserva_a_conferencia(entrada, tmp_path, monkeypatch):
+    saida = tmp_path / "saida"
+    _sefaz(entrada / "s.pdf", [(100, "50,00"), (101, "70,00")])
+    _dominio(entrada / "d.pdf", [(100, "50,00")])
+
+    def nega(*a, **k):
+        raise PermissionError("pdf aberto")
+    monkeypatch.setattr("main.escreve_relatorio", nega)
+
+    assert executa(entrada, saida) == 1
+    [linha] = _resumo(saida)
+    assert linha["Status"] == Status.DIVERGENTE and linha[Categoria.FALTANDO] == 1
+    assert "PDF" in linha["Observação"]
+    assert "pdf aberto" in _log(saida)
+
+
+def test_log_sobrevive_a_falha_da_planilha(entrada, tmp_path, monkeypatch):
+    saida = tmp_path / "saida"
+    _sefaz(entrada / "s.pdf", [(100, "50,00")])
+    _dominio(entrada / "d.pdf", [(100, "50,00")])
+
+    def nega(*a, **k):
+        raise PermissionError("planilha aberta no Excel")
+    monkeypatch.setattr("main.escreve_planilha", nega)
+
+    with pytest.raises(PermissionError):
+        executa(entrada, saida)
+    assert "101" in _log(saida)
