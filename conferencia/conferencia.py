@@ -101,26 +101,46 @@ def confere(
         indice.setdefault((nota.cnpj_emitente, nota.numero), []).append(i)
     casadas: set[int] = set()
 
-    ocorrencias: list[Ocorrencia] = []
-    for sefaz in notas_sefaz:
-        candidatos = [
+    def candidatos_de(sefaz: NotaSefaz) -> list[int]:
+        return [
             i
             for i in indice.get((sefaz.cnpj_emitente, sefaz.numero), [])
             if i not in casadas
         ]
-        if not candidatos:
+
+    # Passada 1: casar quem tem candidato de série igual. Sem ela, duas notas da
+    # Sefaz de mesmo número em séries distintas disputariam o mesmo candidato e o
+    # resultado dependeria da ordem de entrada.
+    par_de: dict[int, int] = {}
+    pendentes: list[int] = []
+    for j, sefaz in enumerate(notas_sefaz):
+        mesma_serie = [i for i in candidatos_de(sefaz) if notas_dominio[i].serie == sefaz.serie]
+        if len(mesma_serie) == 1:
+            par_de[j] = mesma_serie[0]
+            casadas.add(mesma_serie[0])
+        else:
+            pendentes.append(j)
+
+    # Passada 2: a série só desempata, então quem sobrou casa com o candidato
+    # único restante; com mais de um não há como escolher.
+    ambiguas: set[int] = set()
+    for j in pendentes:
+        restantes = candidatos_de(notas_sefaz[j])
+        if len(restantes) == 1:
+            par_de[j] = restantes[0]
+            casadas.add(restantes[0])
+        elif len(restantes) > 1:
+            ambiguas.add(j)
+
+    ocorrencias: list[Ocorrencia] = []
+    for j, sefaz in enumerate(notas_sefaz):
+        if j in ambiguas:
+            ocorrencias.append(_oc_sefaz(Categoria.AMBIGUO, sefaz, None))
+            continue
+        if j not in par_de:
             ocorrencias.append(_oc_sefaz(Categoria.FALTANDO, sefaz, None))
             continue
-        if len(candidatos) > 1:
-            mesma_serie = [i for i in candidatos if notas_dominio[i].serie == sefaz.serie]
-            if len(mesma_serie) != 1:
-                ocorrencias.append(_oc_sefaz(Categoria.AMBIGUO, sefaz, None))
-                continue
-            candidatos = mesma_serie
-
-        par = candidatos[0]
-        casadas.add(par)
-        valor_dominio = notas_dominio[par].valor_contabil
+        valor_dominio = notas_dominio[par_de[j]].valor_contabil
         if sefaz.situacao == SITUACAO_CANCELADA:
             if valor_dominio != 0:
                 ocorrencias.append(

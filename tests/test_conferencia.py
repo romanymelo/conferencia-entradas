@@ -16,6 +16,11 @@ def categorias(ocorrencias):
     return [o.categoria for o in ocorrencias]
 
 
+def identidades(ocorrencias):
+    """Categoria mais a nota a que ela se refere, para comparar sem depender da ordem."""
+    return sorted((o.categoria, o.numero, o.serie) for o in ocorrencias)
+
+
 def test_nota_casada_e_igual_nao_gera_ocorrencia():
     s = nota(numero=1004582, valor=Decimal("189.63"))
     d = [lanc(numero=1004582, valor_contabil=Decimal("189.63"))]
@@ -101,11 +106,22 @@ def test_nenhum_candidato_com_a_serie_da_sefaz_vira_ambiguo():
     assert next(o for o in ocs if o.categoria == Categoria.AMBIGUO).chave == s.chave
 
 
+def test_duas_notas_da_sefaz_no_mesmo_numero_casam_pela_serie():
+    # a serie 2 esta lancada; a que falta e a serie 1, em qualquer ordem de entrada
+    s1 = nota(numero=111, serie="1", valor=Decimal("10.00"), chave="1" * 44)
+    s2 = nota(numero=111, serie="2", valor=Decimal("20.00"), chave="2" * 44)
+    d = [lanc(numero=111, serie="2", valor_contabil=Decimal("20.00"))]
+    esperado = [(Categoria.FALTANDO, "1", s1.chave)]
+    for notas_sefaz in ([s1, s2], [s2, s1]):
+        ocs = confere_par(notas_sefaz, d)
+        assert [(o.categoria, o.serie, o.chave) for o in ocs] == esperado
+
+
 def test_ordem_das_entradas_nao_muda_o_resultado():
     s = [nota(numero=1), nota(numero=2)]
     d = [lanc(numero=2), lanc(numero=3)]
-    direto = sorted(categorias(confere_par(s, d)))
-    invertido = sorted(categorias(confere_par(s[::-1], d[::-1])))
+    direto = identidades(confere_par(s, d))
+    invertido = identidades(confere_par(s[::-1], d[::-1]))
     assert direto == invertido
 
 
