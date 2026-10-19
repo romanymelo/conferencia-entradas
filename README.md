@@ -1,8 +1,48 @@
 # Conferência de Entradas
 
-Confere o relatório de notas fiscais de entrada da Sefaz de Alagoas contra o
-relatório "Acompanhamento de Entradas" do sistema Domínio, empresa por empresa.
-A Sefaz é a fonte de verdade.
+Confere, em massa, se todas as notas fiscais de entrada que a Sefaz de Alagoas
+registrou estão lançadas no sistema Domínio. A Sefaz é a fonte de verdade.
+
+## O problema
+
+Todo mês, um escritório de contabilidade precisa garantir que cada nota fiscal
+emitida contra seus clientes foi lançada no sistema. A Sefaz publica a lista
+oficial; o Domínio tem o que o escritório efetivamente lançou. Os dois têm que
+bater — e uma nota que ficou de fora é omissão de informação ao fisco.
+
+Conferir isso na mão significa cruzar centenas de linhas por empresa, toda
+empresa, todo mês. E os dois relatórios não se alinham linha a linha:
+
+- **O Domínio quebra uma nota em várias linhas, uma por CFOP.** Uma nota de
+  R$ 192,40 pode aparecer como 52,10 e 140,30 em linhas separadas. É preciso
+  somar antes de comparar.
+- **Os dois cortam o período por datas diferentes.** A Sefaz corta pela data de
+  emissão, o Domínio pela data de entrada. Uma nota emitida em 31/08 e lançada
+  em 01/09 aparece num relatório e não no outro — e está correta nos dois.
+- **Casar por nome de fornecedor não funciona.** A Sefaz trunca a razão social,
+  e o mesmo fornecedor aparece sob vários CNPJs. O casamento tem que ser pelo
+  CNPJ.
+- **Nota cancelada também precisa estar lançada**, com valor zerado. A ausência
+  dela é omissão, não um não-evento.
+- **Os dois relatórios escrevem números em formatos diferentes** — a Sefaz usa
+  `1,234.56` e o Domínio `1.234,56`.
+
+## O que esta automação faz
+
+Recebe uma pasta com os PDFs de todas as empresas misturados, pareia cada
+empresa pelo CNPJ lido de dentro dos arquivos, e produz um PDF por empresa
+listando apenas as divergências — cada uma com a chave de acesso da nota, que é
+o que permite ir buscar o XML e corrigir. Em paralelo, gera uma planilha
+consolidada para triagem: quais empresas estão corretas e quais precisam de
+atenção.
+
+A decisão de projeto mais importante é o que acontece quando a leitura falha.
+Uma linha ignorada em silêncio seria uma nota que nunca poderia ser reportada
+como faltante, e a empresa sairia "conferida" com uma omissão real. Por isso
+cada relatório é reconciliado contra os totais que ele próprio declara no
+rodapé: se a contagem ou a soma não fecharem, a empresa é marcada como erro de
+leitura em vez de passar como correta. O documento verifica o leitor, a cada
+execução, com dado real.
 
 ## Instalação
 
@@ -108,8 +148,15 @@ uma nota de rodapé alertando para isso: confira a data de emissão antes de cor
 pytest
 ```
 
-Os testes versionados usam apenas dados fabricados. O teste de ouro (empresa 101,
-setembro de 2026) depende dos PDFs reais de cliente, que nunca entram no
-repositório: crie `tests/amostra/` (pasta local, ignorada pelo git) e coloque
-nela `Entradas 101.pdf` (Domínio) e `Notas fiscais entrada 101.pdf`
-(Sefaz). Sem eles, esses testes aparecem como `SKIPPED` com essa instrução.
+Os testes versionados usam apenas dados fabricados — nenhum documento de cliente
+entra no repositório.
+
+O teste de ouro é a exceção: ele roda a automação inteira contra PDFs reais e
+verifica, para **cada** empresa encontrada, que o resultado fecha com os totais
+que os próprios relatórios declaram. Isso é o que prova que os leitores
+entendem documentos de verdade, e não apenas as suposições de quem os escreveu.
+
+Para rodá-lo, crie a pasta local `tests/amostras/` (ignorada pelo git) e coloque
+nela os pares de PDFs que quiser — qualquer quantidade de empresas, com
+quaisquer nomes de arquivo, já que o pareamento é pelo CNPJ do cabeçalho. Sem
+essa pasta, esses testes aparecem como `SKIPPED` com a instrução.
