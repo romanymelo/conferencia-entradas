@@ -276,7 +276,7 @@ def test_le_cabecalho_levanta_com_cnpj_vazio_em_vez_de_zeros():
 
 
 def _avisos_de_formato(caplog):
-    return [r for r in caplog.records if r.levelno == logging.WARNING and "formato numerico" in r.getMessage()]
+    return [r for r in caplog.records if r.levelno == logging.WARNING and "formato numérico" in r.getMessage()]
 
 
 def test_le_sefaz_em_formato_br_le_corretamente_e_avisa_uma_vez(tmp_path, caplog):
@@ -291,7 +291,7 @@ def test_le_sefaz_em_formato_br_le_corretamente_e_avisa_uma_vez(tmp_path, caplog
     avisos = _avisos_de_formato(caplog)
     assert len(avisos) == 1
     msg = avisos[0].getMessage()
-    assert "esperado US" in msg and "encontrado BR" in msg and "sefaz_br.pdf" in msg
+    assert "esperado 1,234.56 e encontrado 1.234,56" in msg and "Sefaz" in msg and "sefaz_br.pdf" in msg
 
 
 def test_le_sefaz_em_formato_us_nao_avisa_formato(tmp_path, caplog):

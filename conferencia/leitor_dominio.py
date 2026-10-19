@@ -1,3 +1,4 @@
+import logging
 import re
 from decimal import Decimal
 from pathlib import Path
@@ -13,6 +14,7 @@ from conferencia.parsing import (
 # FORMATO NUMERICO: hoje o Dominio escreve em formato BR (126.970,40). parse_valor aceita
 # BR e US; se o documento vier em outro formato, um aviso (por documento) e logado.
 FORMATO_ESPERADO = "BR"
+log = logging.getLogger(__name__)
 _DATA = re.compile(r"\d{2}/\d{2}/\d{4}")
 _CNPJ_CPF = re.compile(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2}")
 _UF = re.compile(r"[A-Z]{2}")
@@ -95,7 +97,7 @@ def _total_geral(linhas: list[str], caminho: Path) -> Decimal:
     valor = _PRIMEIRO_VALOR.search(seguintes[0]) if seguintes else None
     if not valor:
         raise ValueError("Total Geral do Dominio sem valor na linha seguinte ao rotulo")
-    avisa_se_formato_mudou(valor.group(1), FORMATO_ESPERADO, caminho)
+    avisa_se_formato_mudou(valor.group(1), FORMATO_ESPERADO, caminho, "relatório do Domínio", log)
     return parse_valor(valor.group(1))
 
 

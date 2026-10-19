@@ -102,7 +102,7 @@ def _confere_rodape(texto: str, notas: list[NotaSefaz], caminho: Path) -> None:
         raise ValueError(
             f"rodape da Sefaz (Quantidade de Notas / valor total) encontrado {len(rodapes)} vez(es); esperado 1"
         )
-    avisa_se_formato_mudou(rodapes[0][1], FORMATO_ESPERADO, caminho)
+    avisa_se_formato_mudou(rodapes[0][1], FORMATO_ESPERADO, caminho, "relatório da Sefaz", log)
     qtd, total = int(rodapes[0][0]), parse_valor(rodapes[0][1])
     if qtd != len(notas):
         raise ValueError(

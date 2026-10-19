@@ -1,3 +1,4 @@
+import logging
 import shutil
 from decimal import Decimal
 from pathlib import Path
@@ -313,3 +314,41 @@ def test_log_sobrevive_a_falha_da_planilha(entrada, tmp_path, monkeypatch):
     with pytest.raises(PermissionError):
         executa(entrada, saida)
     assert "101" in _log(saida)
+
+
+# --- aviso de mudanca de formato numerico chega ao log_execucao.txt e ao console ---
+
+def test_sefaz_em_formato_brasileiro_avisa_no_log_e_no_console(entrada, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("tests.test_ponta_a_ponta._us", lambda v: v)  # Sefaz escrevendo em formato brasileiro
+    _sefaz(entrada / "sefaz.pdf", [(1, "1.532,66"), (2, "10,00")])
+    _dominio(entrada / "dominio.pdf", [(1, "1.532,66"), (2, "10,00")])
+    saida = tmp_path / "saida"
+    assert executa(entrada, saida) == 0
+    log = _log(saida)
+    assert "formato numérico do relatório da Sefaz mudou: esperado 1,234.56 e encontrado 1.234,56" in log
+    assert "formato numérico do relatório da Sefaz mudou" in capsys.readouterr().out
+    assert "relatório do Domínio mudou" not in log
+
+
+def test_dominio_em_formato_americano_avisa_no_log(entrada, tmp_path):
+    _sefaz(entrada / "sefaz.pdf", [(1, "1.532,66")])
+    linhas = [
+        "ACOMPANHAMENTO DE ENTRADAS", "101 - FARMACIA MODELO LTDA", "CNPJ: 12.345.678/0001-95",
+        "Período: 01/09/2026 até 30/09/2026",
+        "1 05/09/2026 05/09/2026 1 1 36 6 FORNECEDOR TESTE LTDA 45.723.174/0011-92 240000015 "
+        "1-102 101 AL 1,532.66 ICMS 0.00",
+        "Total Geral", "1,532.66ICMS 0.00",
+    ]
+    _pdf(entrada / "dominio.pdf", linhas)
+    saida = tmp_path / "saida"
+    assert executa(entrada, saida) == 0
+    assert "formato numérico do relatório do Domínio mudou: esperado 1.234,56 e encontrado 1,234.56" in _log(saida)
+
+
+def test_executa_nao_deixa_handler_no_logger_do_pacote(entrada, tmp_path):
+    antes = list(logging.getLogger("conferencia").handlers)
+    executa(entrada, tmp_path / "saida")
+    assert logging.getLogger("conferencia").handlers == antes
+    with pytest.raises(NotADirectoryError):
+        executa(tmp_path / "nao_existe", tmp_path / "s2")
+    assert logging.getLogger("conferencia").handlers == antes

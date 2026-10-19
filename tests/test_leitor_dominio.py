@@ -245,10 +245,10 @@ def test_le_dominio_em_formato_us_le_corretamente_e_avisa_uma_vez(tmp_path, capl
     with caplog.at_level(logging.WARNING):
         _, lancs = le_dominio(pdf)
     assert [l.valor_contabil for l in lancs] == [Decimal("1049.16")] * 2
-    avisos = [r for r in caplog.records if r.levelno == logging.WARNING and "formato numerico" in r.getMessage()]
+    avisos = [r for r in caplog.records if r.levelno == logging.WARNING and "formato numérico" in r.getMessage()]
     assert len(avisos) == 1
     msg = avisos[0].getMessage()
-    assert "esperado BR" in msg and "encontrado US" in msg and "dominio_us.pdf" in msg
+    assert "esperado 1.234,56 e encontrado 1,234.56" in msg and "Domínio" in msg and "dominio_us.pdf" in msg
 
 
 def test_le_dominio_em_formato_br_nao_avisa_formato(tmp_path, caplog):
@@ -257,4 +257,4 @@ def test_le_dominio_em_formato_br_nao_avisa_formato(tmp_path, caplog):
     _gera_pdf(pdf, [CABECALHO + [BASE, "Total Geral", "52,10 ICMS 0,00"]])
     with caplog.at_level(logging.WARNING):
         le_dominio(pdf)
-    assert not [r for r in caplog.records if "formato numerico" in r.getMessage()]
+    assert not [r for r in caplog.records if "formato numérico" in r.getMessage()]

@@ -1,4 +1,5 @@
 import argparse
+import logging
 import sys
 import time
 from decimal import Decimal
@@ -45,16 +46,39 @@ def _confere_par(par: Par) -> ResultadoEmpresa:
     return resultado
 
 
+class _CapturaAvisos(logging.Handler):
+    """Leva os logging.warning dos leitores/descoberta para o console e o log_execucao.txt."""
+
+    def __init__(self, anota):
+        super().__init__(level=logging.WARNING)
+        self._anota = anota
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self._anota(f"AVISO: {record.getMessage()}")
+
+
 def executa(entrada: Path, saida: Path) -> int:
     """Confere todas as empresas de `entrada`; devolve quantas ficaram DIVERGENTE."""
-    if not entrada.is_dir():
-        raise NotADirectoryError(f"pasta de entrada não encontrada: {entrada}")
-    inicio = time.monotonic()
     log: list[str] = []
 
     def anota(msg: str) -> None:
         print(msg)
         log.append(msg)
+
+    # So durante a rodada e so no logger do pacote: nao mexe na configuracao global.
+    captura = _CapturaAvisos(anota)
+    logger = logging.getLogger("conferencia")
+    logger.addHandler(captura)
+    try:
+        return _executa(entrada, saida, log, anota)
+    finally:
+        logger.removeHandler(captura)
+
+
+def _executa(entrada: Path, saida: Path, log: list[str], anota) -> int:
+    if not entrada.is_dir():
+        raise NotADirectoryError(f"pasta de entrada não encontrada: {entrada}")
+    inicio = time.monotonic()
 
     identificados: list[ArquivoIdentificado] = []
     falhas: list[ResultadoEmpresa] = []

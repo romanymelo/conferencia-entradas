@@ -3,8 +3,6 @@ import re
 from datetime import datetime, date
 from decimal import Decimal
 
-log = logging.getLogger(__name__)
-
 # Com cauda decimal de exatamente 2 digitos, os dois formatos nunca divergem no valor:
 # '1.911,92' so pode ser BR e '1,911.92' so pode ser US; ambos valem 1911.92.
 _VALOR_BR = re.compile(r"-?(\d{1,3}(\.\d{3})+|\d+),\d{2}")
@@ -50,14 +48,17 @@ def parse_valor(texto: str) -> Decimal:
     return Decimal(t)
 
 
-def avisa_se_formato_mudou(amostra: str, esperado: str, caminho) -> None:
+_EXEMPLO = {"US": "1,234.56", "BR": "1.234,56"}
+
+
+def avisa_se_formato_mudou(amostra: str, esperado: str, caminho, documento: str, log) -> None:
     """Um unico aviso por documento quando o formato numerico difere do esperado."""
     achado = detecta_formato(amostra)
     if achado != esperado:
         log.warning(
-            "o formato numerico do documento %s mudou: esperado %s, encontrado %s "
-            "(valores como %r); a leitura continua normalmente",
-            caminho, esperado, achado, amostra,
+            "formato numérico do %s mudou: esperado %s e encontrado %s (valor lido: %s; arquivo %s). "
+            "A leitura continua; confira os valores desta empresa.",
+            documento, _EXEMPLO[esperado], _EXEMPLO[achado], amostra, caminho,
         )
 
 
