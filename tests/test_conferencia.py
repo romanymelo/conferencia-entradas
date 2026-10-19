@@ -22,8 +22,8 @@ def identidades(ocorrencias):
 
 
 def test_nota_casada_e_igual_nao_gera_ocorrencia():
-    s = nota(numero=1004582, valor=Decimal("189.63"))
-    d = [lanc(numero=1004582, valor_contabil=Decimal("189.63"))]
+    s = nota(numero=1004582, valor=Decimal("192.40"))
+    d = [lanc(numero=1004582, valor_contabil=Decimal("192.40"))]
     assert confere_par([s], d) == []
 
 
@@ -81,7 +81,7 @@ def test_emissao_anterior_ao_periodo_e_fora_do_periodo_nao_sobrando():
 
 
 def test_especie_fora_do_conjunto_nfe_e_nao_nfe():
-    d = [lanc(numero=7421, especie=42, valor_contabil=Decimal("152.00"))]
+    d = [lanc(numero=7421, especie=42, valor_contabil=Decimal("140.00"))]
     assert categorias(confere_par([], d)) == [Categoria.NAO_NFE]
 
 

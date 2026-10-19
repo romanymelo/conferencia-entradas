@@ -26,7 +26,7 @@
 Classes de entrada que a spec implica e que precisam de teste no dono do código:
 
 1. **Dois PDFs do mesmo tipo e mesma empresa na pasta** (`Entradas 101.pdf` e `Entradas 101 novo.pdf` coexistindo) — tem que virar status `DUPLICADO` com os caminhos no log, nunca escolher um em silêncio. → Task 6.
-2. **Série `0`** (Sigma e Martins usam série 0) — não pode ser tratada como série ausente nem virar string vazia na normalização. → Task 1.
+2. **Série `0`** (Delta e Gama usam série 0) — não pode ser tratada como série ausente nem virar string vazia na normalização. → Task 1.
 3. **Lançamento com valor contábil `0,00`** (cancelada zerada) — não pode ser descartado como linha inválida pelo parser nem pela agregação. → Tasks 2 e 5.
 4. **Página de PDF sem linhas de dados** (página 7 da Sefaz tem uma nota só; páginas do Domínio podem começar com `Total Série`) — o leitor tem que devolver lista vazia para a página, não estourar. → Tasks 4 e 5.
 5. **Razão social com caractere inválido em nome de arquivo no Windows** (`BETA & CIA. S.A`, `Gama & Filhos Distribuidora`, `DELTA DIST. IMPORT E EXPORT. LTDA-MATRIZ`) — o nome do PDF de saída precisa ser sanitizado. → Task 8.
@@ -77,13 +77,13 @@ def test_normaliza_cnpj_remove_formatacao():
     assert normaliza_cnpj("45.723.174/0011-92") == "45723174001192"
 
 def test_normaliza_cnpj_preenche_zeros_a_esquerda():
-    assert normaliza_cnpj("5.239.450/0024-84") == "05239450002484"
+    assert normaliza_cnpj("5.239.450/0024-84") == "00523945002484"
 
 def test_normaliza_numero_descarta_zeros_a_esquerda():
-    assert normaliza_numero("002019997") == 1004582
+    assert normaliza_numero("001004582") == 1004582
 
 def test_normaliza_serie_zero_continua_zero():
-    # Sigma e Martins emitem na serie 0; nao pode virar string vazia
+    # Delta e Gama emitem na serie 0; nao pode virar string vazia
     assert normaliza_serie("0") == "0"
 
 def test_normaliza_serie_descarta_zeros_a_esquerda():
@@ -165,12 +165,12 @@ from tests.construtores import lanc
 def test_soma_linhas_de_cfop_da_mesma_nota():
     # nota 1004582 real: 52,10 em 1-102 + 140,30 em 1-403 = 192,40 na Sefaz
     linhas = [
-        lanc(numero=1004582, valor_contabil=Decimal("49.16")),
-        lanc(numero=1004582, valor_contabil=Decimal("140.47")),
+        lanc(numero=1004582, valor_contabil=Decimal("52.10")),
+        lanc(numero=1004582, valor_contabil=Decimal("140.30")),
     ]
     notas, _ = agrega_dominio(linhas)
     assert len(notas) == 1
-    assert notas[0].valor_contabil == Decimal("189.63")
+    assert notas[0].valor_contabil == Decimal("192.40")
     assert notas[0].linhas == 2
 
 def test_nao_mistura_mesmo_numero_de_cnpjs_diferentes():
@@ -197,7 +197,7 @@ def test_mesmo_numero_em_series_distintas_nao_e_somado():
 def test_separa_especies_fora_do_conjunto_nfe():
     linhas = [
         lanc(numero=7421, especie=42, valor_contabil=Decimal("152.00")),
-        lanc(numero=1004582, especie=36, valor_contabil=Decimal("189.63")),
+        lanc(numero=1004582, especie=36, valor_contabil=Decimal("192.40")),
     ]
     notas, fora = agrega_dominio(linhas)
     assert [n.numero for n in notas] == [1004582]
@@ -283,8 +283,8 @@ def categorias(ocorrencias):
     return [o.categoria for o in ocorrencias]
 
 def test_nota_casada_e_igual_nao_gera_ocorrencia():
-    s = nota(numero=1004582, valor=Decimal("189.63"))
-    d = [lanc(numero=1004582, valor_contabil=Decimal("189.63"))]
+    s = nota(numero=1004582, valor=Decimal("192.40"))
+    d = [lanc(numero=1004582, valor_contabil=Decimal("192.40"))]
     assert confere_par([s], d) == []
 
 def test_nota_da_sefaz_ausente_no_dominio_e_faltando():
@@ -457,7 +457,7 @@ def test_parse_linha_extrai_todos_os_campos():
     assert n.data_emissao == date(2026, 9, 1)
     assert n.chave == "2" * 44
     assert n.situacao == "Ativa"
-    assert n.valor == Decimal("189.63")
+    assert n.valor == Decimal("192.40")
 
 def test_parse_linha_le_situacao_cancelada():
     linha = palavras(
@@ -563,7 +563,7 @@ def test_parse_linha_extrai_todos_os_campos():
     assert l.especie == 36
     assert l.data_emissao == date(2026, 9, 1)
     assert l.data_entrada == date(2026, 9, 1)
-    assert l.valor_contabil == Decimal("49.16")
+    assert l.valor_contabil == Decimal("52.10")
 
 def test_parse_linha_descarta_o_um_solto_da_listra_zebrada():
     assert parse_linha("1 " + BASE) == parse_linha(BASE)
@@ -585,7 +585,7 @@ def test_parse_linha_aceita_valor_contabil_zerado():
 def test_parse_linha_le_especie_fora_de_nfe_sem_coluna_tipo():
     # espécie 42 nao traz "ICMS" na coluna Tipo
     texto = ("926 01/09/2026 01/09/2026 7421 39 42 SUPER TESTE LTDA "
-             "30.306.294/0001-45 1-933 106 AL 152,00 0,00 0,00 0,00 0,00 0,00")
+             "30.306.294/0001-45 1-933 106 AL 140,00 0,00 0,00 0,00 0,00 0,00")
     l = parse_linha(texto)
     assert l.especie == 42
     assert l.valor_contabil == Decimal("152.00")
@@ -921,7 +921,7 @@ Fluxo: varrer `entrada/*.pdf` → `identifica` cada um → `pareia` → para cad
 
 - [ ] **Step 1: Escrever os testes que falham**
 
-O teste de ouro depende dos PDFs reais, que não são versionados: `tests/amostra/` precisa conter `Entradas 101 novo.pdf` e `Notas fiscais entrada 101.pdf`. Sem eles, o teste é pulado com mensagem explícita.
+O teste de ouro depende dos PDFs reais, que não são versionados: `tests/amostra/` precisa conter `Entradas 101.pdf` e `Notas fiscais entrada 101.pdf`. Sem eles, o teste é pulado com mensagem explícita.
 
 ```python
 # tests/test_ponta_a_ponta.py

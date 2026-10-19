@@ -13,10 +13,10 @@ def test_normaliza_cnpj_preenche_zeros_a_esquerda_do_cpf():
     assert normaliza_cnpj("123.456.789-00") == "00012345678900"
 
 def test_normaliza_numero_descarta_zeros_a_esquerda():
-    assert normaliza_numero("002019997") == 1004582
+    assert normaliza_numero("001004582") == 1004582
 
 def test_normaliza_serie_zero_continua_zero():
-    # Sigma e Martins emitem na serie 0; nao pode virar string vazia
+    # Delta e Gama emitem na serie 0; nao pode virar string vazia
     assert normaliza_serie("0") == "0"
 
 def test_normaliza_serie_descarta_zeros_a_esquerda():
@@ -33,12 +33,12 @@ def test_normaliza_cnpj_recusa_quando_nao_tem_11_nem_14_digitos(texto):
 
 @pytest.mark.parametrize("texto,esperado,formato", [
     ("56.80", "56.80", "US"), ("56,80", "56.80", "BR"),
-    ("128,450.60", "139500.46", "US"), ("128.450,60", "139500.46", "BR"),
-    ("1,911.92", "1911.92", "US"), ("1.911,92", "1911.92", "BR"),
+    ("128,450.60", "128450.60", "US"), ("128.450,60", "128450.60", "BR"),
+    ("1,917.46", "1917.46", "US"), ("1.917,46", "1917.46", "BR"),
     ("1,234,567.89", "1234567.89", "US"), ("1.234.567,89", "1234567.89", "BR"),
     ("0.00", "0.00", "US"), ("0,00", "0.00", "BR"),
-    ("-56.80", "-56.80", "US"), ("-1.911,92", "-1911.92", "BR"),
-    ("  192,40 ", "189.63", "BR"),
+    ("-56.80", "-56.80", "US"), ("-1.917,46", "-1917.46", "BR"),
+    ("  192,40 ", "192.40", "BR"),
 ])
 def test_parse_valor_e_detecta_formato(texto, esperado, formato):
     r = parse_valor(texto)
@@ -48,8 +48,8 @@ def test_parse_valor_e_detecta_formato(texto, esperado, formato):
 
 @pytest.mark.parametrize("texto", [
     "", "   ", "abc", "56", "56.8", "56,8", "56.800", "1.911", "1,911", "1.2.3,00", "12.34,56",
-    "1,23,456.78", "1.234.56", "1,234,56", "1,234,567", "1.234,567", "1,234.567", "1.911,92x",
-    ".50", ",50", "--1,00", "1,5.00", "1,2345.00", "1.2345,00", "1 911,92", "R$ 1.911,92",
+    "1,23,456.78", "1.234.56", "1,234,56", "1,234,567", "1.234,567", "1,234.567", "1.917,46x",
+    ".50", ",50", "--1,00", "1,5.00", "1,2345.00", "1.2345,00", "1 917,46", "R$ 1.917,46",
 ])
 def test_parse_valor_e_detecta_formato_rejeitam(texto):
     with pytest.raises(ValueError):

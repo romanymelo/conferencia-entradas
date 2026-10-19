@@ -101,7 +101,7 @@ do grupo (é igual dentro do grupo).
 
 A série integra a chave de agregação — e não a chave de casamento (§3.1) —
 porque a quebra por CFOP de uma mesma nota sempre repete a série. Verificado
-nos 21 grupos multi-linha da amostra 101 (notas 117, 4871, 90312, 1004582,
+nos 21 grupos multi-linha da amostra 101 (notas 205, 4871, 90312, 1004582,
 1500233 e as demais): em nenhum a série varia entre as linhas. Agrupar só por
 CNPJ + número fundiria notas de séries distintas, que são notas diferentes, e
 destruiria a informação de que o desempate de §3.1 depende.
@@ -309,7 +309,7 @@ Resultado naquele mês:
 | `SOBRANDO` | 0 |
 | `AMBÍGUO` | 0 |
 | `FORA DO PERÍODO` | 3 — notas 7700121, 7700188 e 7700189 |
-| `NÃO-NFe` | 3 — Plano de Saude Modelo 1.280,20; Servicos Tecnicos Delta 152,00 e 32,00 |
+| `NÃO-NFe` | 3 — Plano de Saúde Modelo 1.280,20; Serviços Técnicos Delta 140,00 e 60,00 |
 
 Status: **OK**. Notas na Sefaz: 204. Total Sefaz: 124.155,05. Total Domínio
 espécie 36: 126.970,40.
@@ -340,7 +340,7 @@ A chave de 44 dígitos da Sefaz carrega o CNPJ do emitente nas posições 7 a 20
 a série em 23 a 25 e o número em 26 a 34. O leitor da Sefaz confere esses três
 campos contra as colunas correspondentes e registra divergência no log.
 Conferido na amostra: a chave `27260945723174001192550010010045821234567890`
-decompõe em CNPJ `45723174001192`, série `001`, número `002019997`, batendo com
+decompõe em CNPJ `45723174001192`, série `001`, número `001004582`, batendo com
 a linha.
 
 ## 7. Fora de escopo
@@ -365,15 +365,15 @@ que é exato nos dois lados.
 
 **Chave por CNPJ + número, não por nome.** O relatório da Sefaz trunca a razão
 social (`OMEGA INDUSTRIAL COMERCIAL E ALIM`) e o mesmo nome cobre CNPJs
-distintos: Alfa aparece sob dois CNPJs, Beta Medicamentos sob dois, Gama Comercio sob dois,
-Omega sob três. Casar por nome seria aproximação; por CNPJ é exato.
+distintos: Distribuidora Alfa aparece sob dois CNPJs, Beta Medicamentos sob dois, Gama Comércio sob dois,
+Ômega Industrial sob três. Casar por nome seria aproximação; por CNPJ é exato.
 
 **Série fora da chave.** A numeração de nota é única por CNPJ dentro do
 período, e nenhuma colisão aparece na amostra. A série fica como critério de
 desempate (§3.1), não como parte da chave.
 
 **Pareamento pelo CNPJ interno, não pelo nome do arquivo.** Os nomes variam
-(`Entradas_101_092026.pdf`, `Entradas 101 novo.pdf`, `Notas fiscais entrada
+(`Entradas_101_092026.pdf`, `Entradas 101.pdf`, `Notas fiscais entrada
 101.pdf`). O CNPJ no cabeçalho é estável nos dois relatórios.
 
 **Processamento sequencial.** O volume por rodada ainda não é conhecido.

@@ -34,7 +34,7 @@ def test_parse_linha_extrai_todos_os_campos():
     assert l.especie == 36
     assert l.data_emissao == date(2026, 9, 1)
     assert l.data_entrada == date(2026, 9, 1)
-    assert l.valor_contabil == Decimal("49.16")
+    assert l.valor_contabil == Decimal("52.10")
 
 def test_parse_linha_descarta_o_um_solto_da_listra_zebrada():
     assert parse_linha("1 " + BASE) == parse_linha(BASE)
@@ -56,13 +56,13 @@ def test_parse_linha_aceita_valor_contabil_zerado():
 def test_parse_linha_le_especie_fora_de_nfe_sem_coluna_tipo():
     # servico: sem serie, sem "ICMS" na coluna Tipo (leitura A: 7421 | 39 | cod. fornecedor 42)
     texto = ("926 01/09/2026 01/09/2026 7421 39 42 SUPER TESTE LTDA "
-             "30.306.294/0001-45 1-933 106 AL 152,00 0,00 0,00 0,00 0,00 0,00")
+             "30.306.294/0001-45 1-933 106 AL 140,00 0,00 0,00 0,00 0,00 0,00")
     l = parse_linha(texto)
     assert l.numero == 7421
     assert l.serie == ""
     assert l.especie == 39
     assert l.nome_emitente == "SUPER TESTE LTDA"
-    assert l.valor_contabil == Decimal("152.00")
+    assert l.valor_contabil == Decimal("140.00")
 
 @pytest.mark.parametrize("texto", [
     "Total Série",
@@ -115,13 +115,13 @@ def test_le_dominio_le_paginas_inclusive_sem_dados_e_multipagina(tmp_path):
     _gera_pdf(pdf, [
         CABECALHO + [BASE, outra],
         ["Total Série", "Sistema licenciado para TESTE"],
-        [BASE, "Total Série", "Total Geral", "108,32 ICMS 0,00"],
+        [BASE, "Total Série", "Total Geral", "114,20 ICMS 0,00"],
     ])
     cab, lancs = le_dominio(pdf)
     assert cab.codigo == "101"
     assert cab.cnpj == "12345678000195"
     assert [l.numero for l in lancs] == [1004582, 1004583, 1004582]
-    assert [l.valor_contabil for l in lancs] == [Decimal("49.16"), Decimal("10.00"), Decimal("49.16")]
+    assert [l.valor_contabil for l in lancs] == [Decimal("52.10"), Decimal("10.00"), Decimal("52.10")]
 
 
 def test_le_dominio_levanta_em_linha_de_dados_invalida(tmp_path):
@@ -149,7 +149,7 @@ def test_parse_linha_levanta_com_duas_linhas_de_dados_na_mesma_linha_de_texto():
 
 def test_le_dominio_bem_formado_reconcilia_com_o_total_geral(tmp_path):
     pdf = tmp_path / "dominio.pdf"
-    _gera_pdf(pdf, [CABECALHO + [BASE, OUTRA, "Total Geral", "59,16 ICMS 0,00"]])
+    _gera_pdf(pdf, [CABECALHO + [BASE, OUTRA, "Total Geral", "62,10 ICMS 0,00"]])
     _, lancs = le_dominio(pdf)
     assert len(lancs) == 2
 
@@ -158,7 +158,7 @@ def test_le_dominio_levanta_quando_uma_linha_de_dados_nao_e_reconhecida(tmp_path
     # codigo grudado na data: a linha nao casa com o inicio de dado e sumiria sem erro
     pdf = tmp_path / "dominio.pdf"
     ilegivel = OUTRA.replace("775 01/09/2026", "77501/09/2026", 1)
-    _gera_pdf(pdf, [CABECALHO + [BASE, ilegivel, "Total Geral", "59,16 ICMS 0,00"]])
+    _gera_pdf(pdf, [CABECALHO + [BASE, ilegivel, "Total Geral", "62,10 ICMS 0,00"]])
     with pytest.raises(ValueError, match="Total Geral"):
         le_dominio(pdf)
 
@@ -219,15 +219,15 @@ def test_le_dominio_separa_nome_longo_que_invade_a_coluna_do_cnpj(tmp_path):
     for x, texto in [(20, "318"), (60, "29/08/2026"), (140, "29/08/2026"), (220, "1007733"),
                      (280, "36"), (300, "29"), (320, "GAMA COM SERV DISTR SA"),
                      (350, "61.198.164/0039-32"), (440, "240000023"), (520, "1-102"),
-                     (560, "101"), (575, "AL"), (600, "672,70"), (650, "ICMS")]:
+                     (560, "101"), (575, "AL"), (600, "715,30"), (650, "ICMS")]:
         c.drawString(x, y, texto)
     c.drawString(20, 450, "Total Geral")
-    c.drawString(20, 435, "672,70")
+    c.drawString(20, 435, "715,30")
     c.showPage()
     c.save()
     [l] = le_dominio(pdf)[1]
     assert (l.cnpj_emitente, l.numero, l.especie, l.valor_contabil) == (
-        "61198164003932", 1007733, 36, Decimal("672.70"))
+        "61198164003932", 1007733, 36, Decimal("715.30"))
 
 
 def test_le_cabecalho_levanta_com_cnpj_vazio_em_vez_de_zeros():
@@ -240,11 +240,11 @@ def test_le_cabecalho_levanta_com_cnpj_vazio_em_vez_de_zeros():
 def test_le_dominio_em_formato_us_le_corretamente_e_avisa_uma_vez(tmp_path, caplog):
     import logging
     pdf = tmp_path / "dominio_us.pdf"
-    us = BASE.replace("52,10", "1,049.16")
-    _gera_pdf(pdf, [CABECALHO + [us, us], ["1Total Geral", "2,098.32ICMS 0.00 0.00"]])
+    us = BASE.replace("52,10", "1,052.10")
+    _gera_pdf(pdf, [CABECALHO + [us, us], ["1Total Geral", "2,104.20ICMS 0.00 0.00"]])
     with caplog.at_level(logging.WARNING):
         _, lancs = le_dominio(pdf)
-    assert [l.valor_contabil for l in lancs] == [Decimal("1049.16")] * 2
+    assert [l.valor_contabil for l in lancs] == [Decimal("1052.10")] * 2
     avisos = [r for r in caplog.records if r.levelno == logging.WARNING and "formato numérico" in r.getMessage()]
     assert len(avisos) == 1
     msg = avisos[0].getMessage()

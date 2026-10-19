@@ -154,8 +154,8 @@ def test_agrega_linhas_de_cfop_da_mesma_nota_e_fecha_com_a_sefaz(entrada, tmp_pa
     [linha] = _resumo(saida)
     assert linha["Status"] == Status.OK
     assert linha["Qtd Domínio"] == 1
-    assert Decimal(str(linha["Total Domínio"])) == Decimal("189.63")
-    assert Decimal(str(linha["Total Sefaz"])) == Decimal("189.63")
+    assert Decimal(str(linha["Total Domínio"])) == Decimal("192.40")
+    assert Decimal(str(linha["Total Sefaz"])) == Decimal("192.40")
     assert linha[Categoria.VALOR_DIVERGENTE] == 0
 
 

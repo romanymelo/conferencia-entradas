@@ -92,5 +92,5 @@ pytest
 Os testes versionados usam apenas dados fabricados. O teste de ouro (empresa 101,
 setembro de 2026) depende dos PDFs reais de cliente, que nunca entram no
 repositório: crie `tests/amostra/` (pasta local, ignorada pelo git) e coloque
-nela `Entradas 101 novo.pdf` (Domínio) e `Notas fiscais entrada 101.pdf`
+nela `Entradas 101.pdf` (Domínio) e `Notas fiscais entrada 101.pdf`
 (Sefaz). Sem eles, esses testes aparecem como `SKIPPED` com essa instrução.

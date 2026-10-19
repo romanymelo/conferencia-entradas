@@ -16,7 +16,7 @@ def palavras(*textos):
 
 LINHA = palavras(
     "01/09/2026", "08:52:43", "11.222.333/0001-44", "FORNECEDOR", "TESTE", "LTDA",
-    "1", "/", "1004582", "2" * 44, "Saída", "Ativa", "189.63",
+    "1", "/", "1004582", "2" * 44, "Saída", "Ativa", "192.40",
 )
 
 
@@ -50,7 +50,7 @@ def test_parse_linha_extrai_todos_os_campos():
     assert n.data_emissao == date(2026, 9, 1)
     assert n.chave == "2" * 44
     assert n.situacao == "Ativa"
-    assert n.valor == Decimal("189.63")
+    assert n.valor == Decimal("192.40")
 
 
 def test_parse_linha_le_situacao_cancelada():
@@ -97,7 +97,7 @@ def _gera_pdf(caminho, paginas):
     c.save()
 
 
-def _linha(chave, valor="189.63"):
+def _linha(chave, valor="192.40"):
     return f"01/09/2026 08:52:43 11.222.333/0001-44 FORNECEDOR TESTE 1 / 99 {chave} Saída Ativa {valor}"
 
 
@@ -119,18 +119,18 @@ def test_le_sefaz_le_paginas_inclusive_sem_dados_e_com_uma_nota(tmp_path):
     _gera_pdf(pdf, [
         CABECALHO + [_linha(CHAVE_OK), _linha(CHAVE_OK, "1,532.66")],
         ["pagina sem nenhuma linha de dados"],
-        [_linha(CHAVE_OK), *_rodape(3, "1,911.92")],
+        [_linha(CHAVE_OK), *_rodape(3, "1,917.46")],
     ])
     cab, notas = le_sefaz(pdf)
     assert cab.cnpj == "12345678000195"
-    assert [n.valor for n in notas] == [Decimal("189.63"), Decimal("1532.66"), Decimal("189.63")]
+    assert [n.valor for n in notas] == [Decimal("192.40"), Decimal("1532.66"), Decimal("192.40")]
     assert all(n.chave == CHAVE_OK for n in notas)
 
 
 def test_le_sefaz_avisa_divergencia_da_chave_sem_interromper(tmp_path, caplog):
     pdf = tmp_path / "sefaz.pdf"
     chave_ruim = "9" * 44
-    _gera_pdf(pdf, [CABECALHO + [_linha(chave_ruim), _linha(CHAVE_OK), *_rodape(2, "379.26")]])
+    _gera_pdf(pdf, [CABECALHO + [_linha(chave_ruim), _linha(CHAVE_OK), *_rodape(2, "384.80")]])
     with caplog.at_level(logging.WARNING):
         _, notas = le_sefaz(pdf)
     assert len(notas) == 2
@@ -165,7 +165,7 @@ def test_le_sefaz_agrupa_linha_com_tops_proximos_em_fronteira_de_arredondamento(
     ]
     pagina = MagicMock()
     pagina.extract_words.return_value = palavras_pdf
-    pagina.extract_text.return_value = chr(10).join(CABECALHO + _rodape(1, "189.63"))
+    pagina.extract_text.return_value = chr(10).join(CABECALHO + _rodape(1, "192.40"))
     pdf = MagicMock(pages=[pagina])
     pdf.__enter__.return_value = pdf
     with patch("conferencia.leitor_sefaz.pdfplumber.open", return_value=pdf):
@@ -177,7 +177,7 @@ def test_le_sefaz_agrupa_linha_com_tops_proximos_em_fronteira_de_arredondamento(
 
 def test_le_sefaz_bem_formado_reconcilia_com_o_rodape(tmp_path):
     pdf = tmp_path / "sefaz.pdf"
-    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), _linha(CHAVE_OK, "10.00"), *_rodape(2, "199.63")]])
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), _linha(CHAVE_OK, "10.00"), *_rodape(2, "202.40")]])
     _, notas = le_sefaz(pdf)
     assert len(notas) == 2
 
@@ -186,7 +186,7 @@ def test_le_sefaz_levanta_quando_a_chave_vem_partida_em_dois_tokens(tmp_path):
     # mecanismo 1: a linha nao tem palavra de 44 digitos e sumiria sem erro
     pdf = tmp_path / "sefaz.pdf"
     partida = _linha(CHAVE_OK[:20] + " " + CHAVE_OK[20:])
-    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), partida, *_rodape(2, "379.26")]])
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), partida, *_rodape(2, "384.80")]])
     with pytest.raises(ValueError, match="Quantidade de Notas"):
         le_sefaz(pdf)
 
@@ -283,11 +283,11 @@ def test_le_sefaz_em_formato_br_le_corretamente_e_avisa_uma_vez(tmp_path, caplog
     pdf = tmp_path / "sefaz_br.pdf"
     _gera_pdf(pdf, [
         CABECALHO + [_linha(CHAVE_OK, "192,40"), _linha(CHAVE_OK, "1.532,66")],
-        [_linha(CHAVE_OK, "192,40"), *_rodape(3, "1.911,92")],
+        [_linha(CHAVE_OK, "192,40"), *_rodape(3, "1.917,46")],
     ])
     with caplog.at_level(logging.WARNING):
         _, notas = le_sefaz(pdf)
-    assert [n.valor for n in notas] == [Decimal("189.63"), Decimal("1532.66"), Decimal("189.63")]
+    assert [n.valor for n in notas] == [Decimal("192.40"), Decimal("1532.66"), Decimal("192.40")]
     avisos = _avisos_de_formato(caplog)
     assert len(avisos) == 1
     msg = avisos[0].getMessage()
@@ -296,7 +296,7 @@ def test_le_sefaz_em_formato_br_le_corretamente_e_avisa_uma_vez(tmp_path, caplog
 
 def test_le_sefaz_em_formato_us_nao_avisa_formato(tmp_path, caplog):
     pdf = tmp_path / "sefaz.pdf"
-    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), *_rodape(1, "189.63")]])
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), *_rodape(1, "192.40")]])
     with caplog.at_level(logging.WARNING):
         le_sefaz(pdf)
     assert _avisos_de_formato(caplog) == []
@@ -305,6 +305,6 @@ def test_le_sefaz_em_formato_us_nao_avisa_formato(tmp_path, caplog):
 def test_rodape_em_formato_br_captura_o_valor_inteiro_e_nao_um_fragmento():
     from conferencia.leitor_sefaz import _RODAPE
     from conferencia.parsing import parse_valor
-    achados = _RODAPE.findall("Quantidade de Notas: 3 1.911,92")
-    assert achados == [("3", "1.911,92")]
-    assert parse_valor(achados[0][1]) == Decimal("1911.92")
+    achados = _RODAPE.findall("Quantidade de Notas: 3 1.917,46")
+    assert achados == [("3", "1.917,46")]
+    assert parse_valor(achados[0][1]) == Decimal("1917.46")

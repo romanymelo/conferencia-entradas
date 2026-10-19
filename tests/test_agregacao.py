@@ -5,12 +5,12 @@ from tests.construtores import lanc
 def test_soma_linhas_de_cfop_da_mesma_nota():
     # nota 1004582 real: 52,10 em 1-102 + 140,30 em 1-403 = 192,40 na Sefaz
     linhas = [
-        lanc(numero=1004582, valor_contabil=Decimal("49.16")),
-        lanc(numero=1004582, valor_contabil=Decimal("140.47")),
+        lanc(numero=1004582, valor_contabil=Decimal("52.10")),
+        lanc(numero=1004582, valor_contabil=Decimal("140.30")),
     ]
     notas, _ = agrega_dominio(linhas)
     assert len(notas) == 1
-    assert notas[0].valor_contabil == Decimal("189.63")
+    assert notas[0].valor_contabil == Decimal("192.40")
     assert notas[0].linhas == 2
 
 def test_nao_mistura_mesmo_numero_de_cnpjs_diferentes():
@@ -24,8 +24,8 @@ def test_nao_mistura_mesmo_numero_de_cnpjs_diferentes():
 
 def test_separa_especies_fora_do_conjunto_nfe():
     linhas = [
-        lanc(numero=7421, especie=42, valor_contabil=Decimal("152.00")),
-        lanc(numero=1004582, especie=36, valor_contabil=Decimal("189.63")),
+        lanc(numero=7421, especie=42, valor_contabil=Decimal("140.00")),
+        lanc(numero=1004582, especie=36, valor_contabil=Decimal("192.40")),
     ]
     notas, fora = agrega_dominio(linhas)
     assert [n.numero for n in notas] == [1004582]

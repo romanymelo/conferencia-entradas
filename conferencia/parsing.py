@@ -4,7 +4,7 @@ from datetime import datetime, date
 from decimal import Decimal
 
 # Com cauda decimal de exatamente 2 digitos, os dois formatos nunca divergem no valor:
-# '1.911,92' so pode ser BR e '1,911.92' so pode ser US; ambos valem 1911.92.
+# '1.917,46' so pode ser BR e '1,917.46' so pode ser US; ambos valem 1917.46.
 _VALOR_BR = re.compile(r"-?(\d{1,3}(\.\d{3})+|\d+),\d{2}")
 _VALOR_US = re.compile(r"-?(\d{1,3}(,\d{3})+|\d+)\.\d{2}")
 
