@@ -46,6 +46,25 @@ Empresas com status `SEM PAR`, `PERÍODO DIVERGENTE`, `DUPLICADO` ou
 `ERRO DE LEITURA` não geram PDF; aparecem só no `Resumo`, com a explicação na
 coluna `Observação`. Uma falha de leitura em uma empresa não interrompe as demais.
 
+## Executável para Windows (sem Python)
+
+Gerar (precisa de Python e `pip install pyinstaller`):
+
+```
+python -m PyInstaller conferencia-entradas.spec --noconfirm
+```
+
+O resultado é `dist/conferencia-entradas.exe` (arquivo único, cerca de 34 MB).
+
+Uso: copie o `.exe` para uma pasta qualquer, crie a pasta `entrada` ao lado dele (se
+não existir, ele cria na primeira execução e avisa), coloque nela os PDFs e dê duplo
+clique. Os resultados aparecem em `saida/<AAAA-MM>/`, também ao lado do `.exe`. A
+janela espera um Enter antes de fechar, para dar tempo de ler o resumo.
+
+Observações: por ser um arquivo único, ele se descompacta a cada execução e leva
+alguns segundos para começar. Alguns antivírus marcam executáveis de arquivo único do
+PyInstaller como suspeitos; é um falso positivo conhecido.
+
 ## Status
 
 | Status | Significado |

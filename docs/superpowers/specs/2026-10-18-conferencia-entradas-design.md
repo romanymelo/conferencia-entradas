@@ -345,7 +345,7 @@ a linha.
 
 ## 7. Fora de escopo
 
-- Interface gráfica e empacotamento em `.exe`.
+- Interface gráfica. (O empacotamento em `.exe` entrou depois, a pedido do dono: ver README, seção "Executável para Windows".)
 - Leitura de XML, consulta a webservice ou qualquer acesso à internet.
 - Correção automática de lançamentos no Domínio.
 - Conferência de saídas, impostos, CFOP, base de cálculo ou alíquota.

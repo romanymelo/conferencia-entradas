@@ -141,13 +141,68 @@ def _executa(entrada: Path, saida: Path, log: list[str], anota) -> int:
     return divergentes
 
 
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Confere entradas da Sefaz contra o Domínio.")
-    ap.add_argument("--entrada", type=Path, default=Path("entrada"))
-    ap.add_argument("--saida", type=Path, default=Path("saida"))
-    args = ap.parse_args()
+# --- Executável (PyInstaller): só vale quando congelado; `python main.py` não muda ---
+
+def _congelado() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
+def _configura_console() -> None:
+    """Console do Windows pode estragar acentos; força UTF-8 (só congelado)."""
+    for fluxo in (sys.stdout, sys.stderr):
+        reconfigure = getattr(fluxo, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+def _pausa() -> None:
+    """Segura a janela aberta ao dar duplo clique (só congelado)."""
     try:
-        sys.exit(min(executa(args.entrada, args.saida), LIMITE_CODIGO_SAIDA))
+        print()
+        input("Pressione Enter para fechar...")
+    except Exception:
+        pass
+
+
+def principal(argv: list[str] | None = None) -> int:
+    congelado = _congelado()
+    if congelado:
+        _configura_console()
+    try:
+        return _principal(argv, congelado)
+    finally:
+        if congelado:
+            _pausa()
+
+
+def _principal(argv: list[str] | None, congelado: bool) -> int:
+    ap = argparse.ArgumentParser(description="Confere entradas da Sefaz contra o Domínio.")
+    ap.add_argument("--entrada", type=Path, default=None)
+    ap.add_argument("--saida", type=Path, default=None)
+    args = ap.parse_args(argv)
+    # congelado: padrões ao lado do .exe, não no diretório de trabalho do atalho
+    base = Path(sys.executable).parent if congelado else Path()
+    entrada = args.entrada if args.entrada is not None else base / "entrada"
+    saida = args.saida if args.saida is not None else base / "saida"
+    if congelado and not entrada.is_dir():
+        try:
+            entrada.mkdir(parents=True)
+        except OSError as e:
+            print(f"ERRO: não foi possível criar a pasta de entrada {entrada}: {e}",
+                  file=sys.stderr)
+            return CODIGO_ENTRADA_INVALIDA
+        print(f"A pasta de entrada não existia e foi criada em: {entrada}\n"
+              "Coloque nela os PDFs da Sefaz e do Domínio e execute novamente.")
+        return 0
+    try:
+        return min(executa(entrada, saida), LIMITE_CODIGO_SAIDA)
     except NotADirectoryError as e:
         print(f"ERRO: {e}", file=sys.stderr)
-        sys.exit(CODIGO_ENTRADA_INVALIDA)
+        return CODIGO_ENTRADA_INVALIDA
+
+
+if __name__ == "__main__":
+    sys.exit(principal())
