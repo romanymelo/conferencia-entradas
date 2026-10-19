@@ -3,6 +3,7 @@ from datetime import datetime, date
 from decimal import Decimal
 
 _VALOR_BR = re.compile(r"^-?[\d.]+,\d{2}$")
+_VALOR_US = re.compile(r"^-?(\d{1,3}(,\d{3})+|\d+)\.\d{2}$")
 
 
 def normaliza_cnpj(texto: str) -> str:
@@ -28,6 +29,15 @@ def parse_valor_br(texto: str) -> Decimal:
     if not _VALOR_BR.match(texto):
         raise ValueError(f"valor monetario invalido: {texto!r}")
     return Decimal(texto.replace(".", "").replace(",", "."))
+
+
+def parse_valor_us(texto: str) -> Decimal:
+    """Formato US (ponto decimal, virgula de milhar): 56.80, 128,450.60. E o da Sefaz;
+    o Dominio usa o BR (parse_valor_br). Os dois documentos diferem de proposito."""
+    texto = texto.strip()
+    if not _VALOR_US.match(texto):
+        raise ValueError(f"valor monetario (formato US) invalido: {texto!r}")
+    return Decimal(texto.replace(",", ""))
 
 
 def parse_data_br(texto: str) -> date:

@@ -295,6 +295,8 @@ Resultado esperado:
 Status: **OK**. Notas na Sefaz: 204. Total Sefaz: 124.155,05. Total Domínio
 espécie 36: 126.970,40.
 
+A amostra hoje em `tests/amostras` é de outro mês (agosto/2026); por isso o teste de ouro afirma os totais declarados nos rodapés dos próprios documentos, e não as cifras fixas acima.
+
 ### 6.2 Testes sintéticos
 
 A amostra real é 100% `Ativa` e não exercita o caminho de cancelada. Casos

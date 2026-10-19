@@ -9,6 +9,8 @@ from conferencia.parsing import (
     normaliza_cnpj, normaliza_numero, normaliza_serie, parse_data_br, parse_valor_br,
 )
 
+# FORMATO NUMERICO: o Dominio escreve valores em formato BR (126.970,40), ao contrario da
+# Sefaz (US). A diferenca e do documento, nao um bug: nao "uniformize".
 _DATA = re.compile(r"\d{2}/\d{2}/\d{4}")
 _CNPJ_CPF = re.compile(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2}")
 _UF = re.compile(r"[A-Z]{2}")
@@ -17,8 +19,14 @@ _ZEBRA = re.compile(r"^1\s+(?=\d+\s+\d{2}/\d{2}/\d{4})")  # '1' solto antes do c
 _PERIODO = re.compile(r"Período:\s*(\d{2}/\d{2}/\d{4})\s+até\s+(\d{2}/\d{2}/\d{4})")
 _CNPJ_ROTULO = re.compile(r"^CNPJ:\s*(\S+)", re.MULTILINE)
 # Rodape (spec 2.2): a linha "Total Geral" abre com o Valor Contabil total.
-_TOTAL_GERAL = re.compile(r"Total Geral[^\d\n]*(\d[\d.]*,\d{2})")
+# No PDF real o valor fica na linha SEGUINTE ao rotulo, colado ao 'ICMS' ('126.970,40ICMS').
+_ROTULO_TOTAL_GERAL = re.compile(r"Total Geral")
+_PRIMEIRO_VALOR = re.compile(r"(?<![\d.,])(\d[\d.]*,\d{2})")
 _EMPRESA = re.compile(r"^(\d+)\s+-\s+(.+?)\s*$", re.MULTILINE)
+# Campo de cabecalho que divide a linha com a razao social ('... LTDA Página: 0001').
+_CAMPO_DE_CABECALHO = re.compile(r"\s+[^\W\d_][\w.]*:.*$")
+_TOLERANCIA_TOP = 2.0  # pt: celulas de uma mesma linha visual
+_FOLGA_CELULA = 0.5  # pt: caracteres contiguos (mesma celula) distam menos que isto
 
 
 def e_dominio(texto_primeira_pagina: str) -> bool:
@@ -34,7 +42,7 @@ def le_cabecalho(texto: str) -> Cabecalho:
     return Cabecalho(
         codigo=empresa.group(1),
         cnpj=normaliza_cnpj(cnpj.group(1)),
-        razao_social=empresa.group(2),
+        razao_social=_CAMPO_DE_CABECALHO.sub("", empresa.group(2)),
         periodo_inicio=parse_data_br(periodo.group(1)),
         periodo_fim=parse_data_br(periodo.group(2)),
     )
@@ -76,30 +84,67 @@ def parse_linha(texto: str) -> LancamentoDominio | None:
     )
 
 
-def _confere_total_geral(texto: str, lancamentos: list[LancamentoDominio]) -> None:
+def _total_geral(linhas: list[str]) -> Decimal:
+    """Valor Contabil do 'Total Geral': 1o valor monetario da linha seguinte ao rotulo."""
+    rotulos = [i for i, l in enumerate(linhas) if _ROTULO_TOTAL_GERAL.search(l)]
+    if len(rotulos) != 1:
+        raise ValueError(f"Total Geral do Dominio encontrado {len(rotulos)} vez(es); esperado 1")
+    seguintes = [l for l in linhas[rotulos[0] + 1:] if l.strip()]
+    valor = _PRIMEIRO_VALOR.search(seguintes[0]) if seguintes else None
+    if not valor:
+        raise ValueError("Total Geral do Dominio sem valor na linha seguinte ao rotulo")
+    return parse_valor_br(valor.group(1))
+
+
+def _confere_total_geral(linhas: list[str], lancamentos: list[LancamentoDominio]) -> None:
     """Reconcilia a soma de todos os lancamentos (NF-e ou nao) com o Total Geral (spec 2.2).
     Comparacao exata em Decimal: o Total Geral e uma soma exata dos Valores Contabeis.
     Relatorio sem lancamentos e legitimo (Total Geral 0,00): so falha se o total declarado for maior."""
-    totais = _TOTAL_GERAL.findall(texto)
-    if len(totais) != 1:
-        raise ValueError(f"Total Geral do Dominio encontrado {len(totais)} vez(es); esperado 1")
-    total = parse_valor_br(totais[0])
+    total = _total_geral(linhas)
     soma = sum((l.valor_contabil for l in lancamentos), Decimal("0"))
     if soma != total:
         raise ValueError(f"Total Geral declarado ({total}) difere da soma dos lancamentos lidos ({soma})")
 
 
+def _celulas(pagina) -> list[tuple[float, float, str]]:
+    """(top, x0, texto) de cada celula, na ordem de desenho do PDF. O Dominio desenha cada
+    celula separada e o nome do fornecedor invade a coluna do CNPJ: ordenar os caracteres
+    por posicao os embaralha ('29GAMA COM SERV4 3D.I2S1T4R...'), a ordem do fluxo nao."""
+    celulas: list[tuple[float, float, str]] = []
+    anterior = None
+    for c in pagina.chars:
+        if (anterior is None or abs(c["x0"] - anterior["x1"]) > _FOLGA_CELULA
+                or abs(c["top"] - anterior["top"]) > _TOLERANCIA_TOP):
+            celulas.append((c["top"], c["x0"], ""))
+        top, x0, texto = celulas[-1]
+        celulas[-1] = (top, x0, texto + c["text"])
+        anterior = c
+    return celulas
+
+
+def _linhas_da_pagina(pagina) -> list[str]:
+    """Reconstroi as linhas visuais juntando as celulas por proximidade vertical e x."""
+    linhas: list[list[tuple[float, float, str]]] = []
+    top_inicial = None
+    for cel in sorted(_celulas(pagina), key=lambda c: c[0]):
+        if top_inicial is None or cel[0] - top_inicial > _TOLERANCIA_TOP:
+            linhas.append([])
+            top_inicial = cel[0]
+        linhas[-1].append(cel)
+    return [" ".join(t.strip() for _, _, t in sorted(l, key=lambda c: c[1]) if t.strip()) for l in linhas]
+
+
 def le_dominio(caminho: Path) -> tuple[Cabecalho, list[LancamentoDominio]]:
     lancamentos: list[LancamentoDominio] = []
-    textos: list[str] = []
+    todas: list[str] = []
     with pdfplumber.open(caminho) as pdf:
         cabecalho = le_cabecalho(pdf.pages[0].extract_text() or "")
         for pagina in pdf.pages:
-            texto = pagina.extract_text() or ""
-            textos.append(texto)
-            for linha in texto.splitlines():
+            linhas = _linhas_da_pagina(pagina)
+            todas.extend(linhas)
+            for linha in linhas:
                 lancamento = parse_linha(linha)
                 if lancamento is not None:
                     lancamentos.append(lancamento)
-    _confere_total_geral("\n".join(textos), lancamentos)
+    _confere_total_geral(todas, lancamentos)
     return cabecalho, lancamentos

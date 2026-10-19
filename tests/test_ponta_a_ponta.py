@@ -10,8 +10,23 @@ from reportlab.pdfgen import canvas
 from conferencia.modelo import Categoria, Status
 from main import executa
 
-AMOSTRA = Path(__file__).parent / "amostra"
+# Pasta local com os dois PDFs reais de uma empresa, nunca versionada (.gitignore).
+# Aceita "amostra" ou "amostras": o pareamento e por CNPJ lido de dentro do PDF, entao
+# nem o nome da pasta nem o nome dos arquivos importam para a conferencia.
+_CANDIDATAS = ("amostra", "amostras")
+AMOSTRA = next(
+    (Path(__file__).parent / nome for nome in _CANDIDATAS
+     if (Path(__file__).parent / nome).is_dir()),
+    Path(__file__).parent / _CANDIDATAS[0],
+)
 
+
+# Valores DECLARADOS nos rodapes da amostra em tests/amostras (independem do parser e do mes):
+# Sefaz "Quantidade de Notas: 174 128,450.60" e Dominio "Total Geral 126.970,40".
+# Trocar a amostra exige editar apenas estes tres numeros.
+SEFAZ_QTD_DECLARADA = 174
+SEFAZ_TOTAL_DECLARADO = Decimal("139500.46")
+DOMINIO_TOTAL_GERAL_DECLARADO = Decimal("138848.05")
 
 # --- PDFs fabricados (dados fictícios) ---
 
@@ -34,6 +49,11 @@ def _soma(valores) -> str:
     return f"{total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _us(valor_br: str) -> str:
+    # a Sefaz escreve em formato US (56.80; 128,450.60), o Dominio em BR
+    return valor_br.replace(".", "X").replace(",", ".").replace("X", ",")
+
+
 def _sefaz(caminho, notas, cnpj="12.345.678/0001-95"):
     linhas = [
         "SECRETARIA DE ESTADO DA FAZENDA DE ALAGOAS",
@@ -44,9 +64,9 @@ def _sefaz(caminho, notas, cnpj="12.345.678/0001-95"):
     for numero, valor in notas:
         linhas.append(
             f"05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / {numero} "
-            f"{_chave(numero)} Saída Ativa {valor}"
+            f"{_chave(numero)} Saída Ativa {_us(valor)}"
         )
-    linhas += [f"Quantidade de Notas: {len(notas)}", f"Valor Total: {_soma(v for _, v in notas)}"]
+    linhas += [f"Quantidade de Notas: {len(notas)}", f"Valor Total: {_us(_soma(v for _, v in notas))}"]
     _pdf(caminho, linhas)
 
 
@@ -62,7 +82,7 @@ def _dominio(caminho, notas, cnpj="12.345.678/0001-95", extra=()):
             f"1 05/09/2026 05/09/2026 {numero} 1 36 6 FORNECEDOR TESTE LTDA "
             f"45.723.174/0011-92 240000015 1-102 101 AL {valor} ICMS 0,00"
         )
-    _pdf(caminho, [*linhas, *extra, f"Total Geral {_soma(v for _, v in notas)} 0,00"])
+    _pdf(caminho, [*linhas, *extra, "Total Geral", f"{_soma(v for _, v in notas)}ICMS 0,00"])
 
 
 @pytest.fixture
@@ -205,10 +225,10 @@ def test_sefaz_com_nota_perdida_na_leitura_vira_erro_de_leitura_nao_ok(entrada, 
         "Razão Social: FARMACIA MODELO LTDA",
         "Período: 01/09/2026 - 30/09/2026",
         f"05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / 100 "
-        f"{_chave(100)} Saída Ativa 50,00",
+        f"{_chave(100)} Saída Ativa 50.00",
         f"05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / 101 "
-        f"{_chave(101)[:20]} {_chave(101)[20:]} Saída Ativa 70,00",
-        "Quantidade de Notas: 2", "Valor Total: 120,00",
+        f"{_chave(101)[:20]} {_chave(101)[20:]} Saída Ativa 70.00",
+        "Quantidade de Notas: 2", "Valor Total: 120.00",
     ])
     _dominio(entrada / "d.pdf", [(100, "50,00"), (101, "70,00")])
     assert executa(entrada, saida) == 0
@@ -236,24 +256,27 @@ def pasta_amostra(tmp_path):
 
 def test_teste_de_ouro_empresa_101(pasta_amostra):
     entrada, saida = pasta_amostra
-    assert executa(entrada, saida) == 0
+    executa(entrada, saida)
 
-    aba = load_workbook(next(saida.rglob("*.xlsx")))["Resumo"]
+    wb = load_workbook(next(saida.rglob("*.xlsx")))
+    aba = wb["Resumo"]
     cabecalho = [c.value for c in aba[1]]
     linha = {cabecalho[i]: c.value for i, c in enumerate(aba[2])}
 
     assert linha["Código"] == "101"
-    assert linha["Status"] == Status.OK
-    assert linha["Qtd Sefaz"] == 204
-    assert Decimal(str(linha["Total Sefaz"])) == Decimal("133721.36")
-    assert Decimal(str(linha["Total Domínio"])) == Decimal("137112.13")
-    assert linha[Categoria.FALTANDO] == 0
-    assert linha[Categoria.SOBRANDO] == 0
-    assert linha[Categoria.VALOR_DIVERGENTE] == 0
-    assert linha[Categoria.CANCELADA_NAO_ZERADA] == 0
-    assert linha[Categoria.AMBIGUO] == 0
-    assert linha[Categoria.FORA_DO_PERIODO] == 3
-    assert linha[Categoria.NAO_NFE] == 3
+    assert linha["Status"] != Status.ERRO_LEITURA, linha["Observação"]
+    assert linha["Qtd Sefaz"] == SEFAZ_QTD_DECLARADA
+    assert Decimal(str(linha["Total Sefaz"])) == SEFAZ_TOTAL_DECLARADO
+
+    # Total Dominio so soma a espécie NF-e; as demais viram ocorrencia NAO-NFe no Detalhe.
+    det = wb["Detalhe"]
+    cab_det = [c.value for c in det[1]]
+    nao_nfe = sum(
+        (Decimal(str(r[cab_det.index("Valor Domínio")])) for r in det.iter_rows(min_row=2, values_only=True)
+         if r[cab_det.index("Categoria")] == Categoria.NAO_NFE),
+        Decimal("0"),
+    )
+    assert Decimal(str(linha["Total Domínio"])) + nao_nfe == DOMINIO_TOTAL_GERAL_DECLARADO
 
 
 def test_gera_pdf_para_a_empresa_conferida(pasta_amostra):

@@ -115,7 +115,7 @@ def test_le_dominio_le_paginas_inclusive_sem_dados_e_multipagina(tmp_path):
     _gera_pdf(pdf, [
         CABECALHO + [BASE, outra],
         ["Total Série", "Sistema licenciado para TESTE"],
-        [BASE, "Total Série", "Total Geral 108,32 0,00"],
+        [BASE, "Total Série", "Total Geral", "108,32 ICMS 0,00"],
     ])
     cab, lancs = le_dominio(pdf)
     assert cab.codigo == "101"
@@ -149,7 +149,7 @@ def test_parse_linha_levanta_com_duas_linhas_de_dados_na_mesma_linha_de_texto():
 
 def test_le_dominio_bem_formado_reconcilia_com_o_total_geral(tmp_path):
     pdf = tmp_path / "dominio.pdf"
-    _gera_pdf(pdf, [CABECALHO + [BASE, OUTRA, "Total Geral 59,16 0,00"]])
+    _gera_pdf(pdf, [CABECALHO + [BASE, OUTRA, "Total Geral", "59,16 ICMS 0,00"]])
     _, lancs = le_dominio(pdf)
     assert len(lancs) == 2
 
@@ -158,20 +158,20 @@ def test_le_dominio_levanta_quando_uma_linha_de_dados_nao_e_reconhecida(tmp_path
     # codigo grudado na data: a linha nao casa com o inicio de dado e sumiria sem erro
     pdf = tmp_path / "dominio.pdf"
     ilegivel = OUTRA.replace("775 01/09/2026", "77501/09/2026", 1)
-    _gera_pdf(pdf, [CABECALHO + [BASE, ilegivel, "Total Geral 59,16 0,00"]])
+    _gera_pdf(pdf, [CABECALHO + [BASE, ilegivel, "Total Geral", "59,16 ICMS 0,00"]])
     with pytest.raises(ValueError, match="Total Geral"):
         le_dominio(pdf)
 
 
 def test_le_dominio_sem_lancamentos_com_total_geral_zerado_e_lido_com_sucesso(tmp_path):
     pdf = tmp_path / "dominio.pdf"
-    _gera_pdf(pdf, [CABECALHO + ["Total Geral 0,00"]])
+    _gera_pdf(pdf, [CABECALHO + ["Total Geral", "0,00 ICMS 0,00"]])
     assert le_dominio(pdf)[1] == []
 
 
 def test_le_dominio_levanta_quando_total_geral_declara_valor_e_nada_foi_lido(tmp_path):
     pdf = tmp_path / "dominio.pdf"
-    _gera_pdf(pdf, [CABECALHO + ["Total Geral 128.450,60"]])
+    _gera_pdf(pdf, [CABECALHO + ["Total Geral", "128.450,60 ICMS 0,00"]])
     with pytest.raises(ValueError, match="Total Geral"):
         le_dominio(pdf)
 
@@ -181,6 +181,53 @@ def test_le_dominio_levanta_sem_total_geral(tmp_path):
     _gera_pdf(pdf, [CABECALHO + [BASE]])
     with pytest.raises(ValueError, match="Total Geral"):
         le_dominio(pdf)
+
+
+def test_le_cabecalho_tira_o_campo_de_pagina_da_razao_social():
+    # linha real: o 'Página: 0001' do canto direito vem na mesma linha da razão social
+    texto = ("101 - FARMACIA MODELO LTDA Página: 0001\n"
+             "CNPJ: 12.345.678/0001-95 Emissão: 18/10/2026\n"
+             "Período: 01/08/2026 até 31/08/2026\n")
+    assert le_cabecalho(texto).razao_social == "FARMACIA MODELO LTDA"
+
+
+@pytest.mark.parametrize("texto", [
+    "CNPJ: 12.345.678/0001-95 Emissão: 18/10/2026",   # cabeçalho com âncora de CNPJ
+    "1 CRF 0,00 20,08 0,00 0,00 0,00 0,00",           # tipo de linha de rodapé nunca visto
+])
+def test_parse_linha_linhas_reais_que_nao_sao_dado_retornam_none(texto):
+    assert parse_linha(texto) is None
+
+
+def test_total_geral_com_o_valor_na_linha_seguinte_colado_ao_icms(tmp_path):
+    # layout real: rótulo com o '1' da zebra, valor contábil na linha de baixo
+    pdf = tmp_path / "d.pdf"
+    _gera_pdf(pdf, [CABECALHO + [BASE, "1Total Geral", "52,10ICMS 0,00 0,00 0,00 0,00 0,00 52,10",
+                                 "1 CRF 0,00 20,08 0,00 0,00 0,00 0,00"]])
+    assert len(le_dominio(pdf)[1]) == 1
+
+
+def test_le_dominio_separa_nome_longo_que_invade_a_coluna_do_cnpj(tmp_path):
+    # no PDF real o nome do fornecedor se sobrepõe ao CNPJ; o texto extraído sai embaralhado
+    # ('29GAMA COM SERV4 3D.I2S1T4R...'). Cada célula é desenhada à parte, sem sobreposição
+    # de caracteres dentro dela: a leitura deve seguir as células, não o texto.
+    pdf = tmp_path / "d.pdf"
+    c = canvas.Canvas(str(pdf), pagesize=landscape(A4))
+    for y, texto in zip((550, 535, 520, 505), CABECALHO):
+        c.drawString(20, y, texto)
+    y = 480
+    for x, texto in [(20, "318"), (60, "29/08/2026"), (140, "29/08/2026"), (220, "1007733"),
+                     (280, "36"), (300, "29"), (320, "GAMA COM SERV DISTR SA"),
+                     (350, "61.198.164/0039-32"), (440, "240000023"), (520, "1-102"),
+                     (560, "101"), (575, "AL"), (600, "672,70"), (650, "ICMS")]:
+        c.drawString(x, y, texto)
+    c.drawString(20, 450, "Total Geral")
+    c.drawString(20, 435, "672,70")
+    c.showPage()
+    c.save()
+    [l] = le_dominio(pdf)[1]
+    assert (l.cnpj_emitente, l.numero, l.especie, l.valor_contabil) == (
+        "61198164003932", 1007733, 36, Decimal("672.70"))
 
 
 def test_le_cabecalho_levanta_com_cnpj_vazio_em_vez_de_zeros():

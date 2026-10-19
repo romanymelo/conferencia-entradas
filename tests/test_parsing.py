@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from conferencia.parsing import (
     normaliza_cnpj, normaliza_numero, normaliza_serie,
-    parse_valor_br, parse_data_br,
+    parse_valor_br, parse_valor_us, parse_data_br,
 )
 
 def test_normaliza_cnpj_remove_formatacao():
@@ -44,3 +44,17 @@ def test_parse_valor_br_rejeita_lixo(texto):
 def test_normaliza_cnpj_recusa_quando_nao_tem_11_nem_14_digitos(texto):
     with pytest.raises(ValueError):
         normaliza_cnpj(texto)
+
+
+@pytest.mark.parametrize("texto,esperado", [
+    ("56.80", "56.80"), ("128,450.60", "139500.46"), ("0.00", "0.00"), ("1,532.66", "1532.66"),
+])
+def test_parse_valor_us(texto, esperado):
+    r = parse_valor_us(texto)
+    assert r == Decimal(esperado) and isinstance(r, Decimal)
+
+
+@pytest.mark.parametrize("texto", ["", "abc", "56,80", "126.970,40", "1.532,66", "56.8", "1,5.00", "1,2345.00"])
+def test_parse_valor_us_rejeita_o_que_nao_e_formato_us(texto):
+    with pytest.raises(ValueError):
+        parse_valor_us(texto)

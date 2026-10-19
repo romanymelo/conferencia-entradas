@@ -7,9 +7,11 @@ import pdfplumber
 
 from conferencia.modelo import Cabecalho, NotaSefaz
 from conferencia.parsing import (
-    normaliza_cnpj, normaliza_numero, normaliza_serie, parse_data_br, parse_valor_br,
+    normaliza_cnpj, normaliza_numero, normaliza_serie, parse_data_br, parse_valor_us,
 )
 
+# FORMATO NUMERICO: a Sefaz escreve valores em formato US (56.80; 128,450.60), ao contrario do
+# Dominio (BR). A diferenca e do documento, nao um bug: nao "uniformize".
 log = logging.getLogger(__name__)
 
 _CHAVE = re.compile(r"\d{44}")
@@ -20,7 +22,7 @@ _TOLERANCIA_TOP = 2.0  # pt: palavras de uma mesma linha visual
 _PERIODO = re.compile(r"Período:\s*(\d{2}/\d{2}/\d{4})\s*-\s*(\d{2}/\d{2}/\d{4})")
 _CNPJ_ROTULO = re.compile(r"^CNPJ:\s*(\S+)", re.MULTILINE)
 # Rodape (spec 2.1): quantidade e valor total declarados pela propria Sefaz.
-_RODAPE = re.compile(r"Quantidade de Notas:?\s*(\d+)[^\d]*(\d[\d.]*,\d{2})")
+_RODAPE = re.compile(r"Quantidade de Notas:?\s*(\d+)[^\d]*(\d[\d,]*\.\d{2})")
 _RAZAO_ROTULO = re.compile(r"^Razão Social:\s*(.+?)\s*$", re.MULTILINE)
 
 
@@ -72,7 +74,7 @@ def parse_linha(palavras: list[dict]) -> NotaSefaz | None:
         data_emissao=parse_data_br(textos[0]),
         chave=textos[k],
         situacao=textos[k + 2],
-        valor=parse_valor_br(textos[k + 3]),
+        valor=parse_valor_us(textos[k + 3]),
     )
 
 
@@ -98,7 +100,7 @@ def _confere_rodape(texto: str, notas: list[NotaSefaz]) -> None:
         raise ValueError(
             f"rodape da Sefaz (Quantidade de Notas / valor total) encontrado {len(rodapes)} vez(es); esperado 1"
         )
-    qtd, total = int(rodapes[0][0]), parse_valor_br(rodapes[0][1])
+    qtd, total = int(rodapes[0][0]), parse_valor_us(rodapes[0][1])
     if qtd != len(notas):
         raise ValueError(
             f"Quantidade de Notas declarada no rodape ({qtd}) difere das linhas lidas ({len(notas)})"

@@ -16,7 +16,7 @@ def palavras(*textos):
 
 LINHA = palavras(
     "01/09/2026", "08:52:43", "11.222.333/0001-44", "FORNECEDOR", "TESTE", "LTDA",
-    "1", "/", "1004582", "2" * 44, "Saída", "Ativa", "192,40",
+    "1", "/", "1004582", "2" * 44, "Saída", "Ativa", "189.63",
 )
 
 
@@ -56,7 +56,7 @@ def test_parse_linha_extrai_todos_os_campos():
 def test_parse_linha_le_situacao_cancelada():
     linha = palavras(
         "01/09/2026", "08:52:43", "11.222.333/0001-44", "FORNECEDOR",
-        "1", "/", "99", "3" * 44, "Saída", "Cancelada", "500,00",
+        "1", "/", "99", "3" * 44, "Saída", "Cancelada", "500.00",
     )
     assert parse_linha(linha).situacao == "Cancelada"
 
@@ -97,7 +97,7 @@ def _gera_pdf(caminho, paginas):
     c.save()
 
 
-def _linha(chave, valor="192,40"):
+def _linha(chave, valor="189.63"):
     return f"01/09/2026 08:52:43 11.222.333/0001-44 FORNECEDOR TESTE 1 / 99 {chave} Saída Ativa {valor}"
 
 
@@ -117,9 +117,9 @@ CABECALHO = [
 def test_le_sefaz_le_paginas_inclusive_sem_dados_e_com_uma_nota(tmp_path):
     pdf = tmp_path / "sefaz.pdf"
     _gera_pdf(pdf, [
-        CABECALHO + [_linha(CHAVE_OK), _linha(CHAVE_OK, "1.532,66")],
+        CABECALHO + [_linha(CHAVE_OK), _linha(CHAVE_OK, "1,532.66")],
         ["pagina sem nenhuma linha de dados"],
-        [_linha(CHAVE_OK), *_rodape(3, "1.911,92")],
+        [_linha(CHAVE_OK), *_rodape(3, "1,911.92")],
     ])
     cab, notas = le_sefaz(pdf)
     assert cab.cnpj == "12345678000195"
@@ -130,7 +130,7 @@ def test_le_sefaz_le_paginas_inclusive_sem_dados_e_com_uma_nota(tmp_path):
 def test_le_sefaz_avisa_divergencia_da_chave_sem_interromper(tmp_path, caplog):
     pdf = tmp_path / "sefaz.pdf"
     chave_ruim = "9" * 44
-    _gera_pdf(pdf, [CABECALHO + [_linha(chave_ruim), _linha(CHAVE_OK), *_rodape(2, "379,26")]])
+    _gera_pdf(pdf, [CABECALHO + [_linha(chave_ruim), _linha(CHAVE_OK), *_rodape(2, "379.26")]])
     with caplog.at_level(logging.WARNING):
         _, notas = le_sefaz(pdf)
     assert len(notas) == 2
@@ -141,7 +141,7 @@ def test_le_sefaz_avisa_divergencia_da_chave_sem_interromper(tmp_path, caplog):
 def test_parse_linha_aceita_emissor_cpf_com_14_digitos():
     linha = palavras(
         "01/09/2026", "08:52:43", "123.456.789-00", "PRODUTOR", "RURAL",
-        "1", "/", "5", "4" * 44, "Saída", "Ativa", "10,00",
+        "1", "/", "5", "4" * 44, "Saída", "Ativa", "10.00",
     )
     assert parse_linha(linha).cnpj_emitente == "00012345678900"
 
@@ -149,7 +149,7 @@ def test_parse_linha_aceita_emissor_cpf_com_14_digitos():
 def test_parse_linha_rejeita_situacao_desconhecida():
     linha = palavras(
         "01/09/2026", "08:52:43", "11.222.333/0001-44", "FORNECEDOR",
-        "1", "/", "5", "4" * 44, "Saída", "Ativa", "10,00",
+        "1", "/", "5", "4" * 44, "Saída", "Ativa", "10.00",
     )
     linha[-2]["text"] = "Xyz"
     with pytest.raises(ValueError):
@@ -165,7 +165,7 @@ def test_le_sefaz_agrupa_linha_com_tops_proximos_em_fronteira_de_arredondamento(
     ]
     pagina = MagicMock()
     pagina.extract_words.return_value = palavras_pdf
-    pagina.extract_text.return_value = chr(10).join(CABECALHO + _rodape(1, "192,40"))
+    pagina.extract_text.return_value = chr(10).join(CABECALHO + _rodape(1, "189.63"))
     pdf = MagicMock(pages=[pagina])
     pdf.__enter__.return_value = pdf
     with patch("conferencia.leitor_sefaz.pdfplumber.open", return_value=pdf):
@@ -177,7 +177,7 @@ def test_le_sefaz_agrupa_linha_com_tops_proximos_em_fronteira_de_arredondamento(
 
 def test_le_sefaz_bem_formado_reconcilia_com_o_rodape(tmp_path):
     pdf = tmp_path / "sefaz.pdf"
-    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), _linha(CHAVE_OK, "10,00"), *_rodape(2, "199,63")]])
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), _linha(CHAVE_OK, "10.00"), *_rodape(2, "199.63")]])
     _, notas = le_sefaz(pdf)
     assert len(notas) == 2
 
@@ -186,27 +186,27 @@ def test_le_sefaz_levanta_quando_a_chave_vem_partida_em_dois_tokens(tmp_path):
     # mecanismo 1: a linha nao tem palavra de 44 digitos e sumiria sem erro
     pdf = tmp_path / "sefaz.pdf"
     partida = _linha(CHAVE_OK[:20] + " " + CHAVE_OK[20:])
-    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), partida, *_rodape(2, "379,26")]])
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), partida, *_rodape(2, "379.26")]])
     with pytest.raises(ValueError, match="Quantidade de Notas"):
         le_sefaz(pdf)
 
 
 def test_le_sefaz_sem_notas_com_rodape_zerado_e_lido_com_sucesso(tmp_path):
     pdf = tmp_path / "sefaz.pdf"
-    _gera_pdf(pdf, [CABECALHO + _rodape(0, "0,00")])
+    _gera_pdf(pdf, [CABECALHO + _rodape(0, "0.00")])
     assert le_sefaz(pdf)[1] == []
 
 
 def test_le_sefaz_levanta_quando_rodape_declara_notas_e_nenhuma_foi_lida(tmp_path):
     pdf = tmp_path / "sefaz.pdf"
-    _gera_pdf(pdf, [CABECALHO + _rodape(204, "124.155,05")])
+    _gera_pdf(pdf, [CABECALHO + _rodape(204, "133,721.36")])
     with pytest.raises(ValueError, match="Quantidade de Notas"):
         le_sefaz(pdf)
 
 
 def test_le_sefaz_levanta_quando_o_valor_total_nao_fecha(tmp_path):
     pdf = tmp_path / "sefaz.pdf"
-    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), *_rodape(1, "189,64")]])
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), *_rodape(1, "189.64")]])
     with pytest.raises(ValueError, match="valor total"):
         le_sefaz(pdf)
 
@@ -237,7 +237,7 @@ def _palavras_em(top, textos, x_inicial=0):
 
 def test_parse_linha_levanta_com_duas_chaves_na_mesma_linha():
     # mecanismo 2: duas notas fundidas num so cluster perderiam a segunda
-    linha = palavras(*(_linha(CHAVE_OK).split() + _linha(CHAVE_OK, "70,00").split()))
+    linha = palavras(*(_linha(CHAVE_OK).split() + _linha(CHAVE_OK, "70.00").split()))
     with pytest.raises(ValueError, match="mais de uma chave"):
         parse_linha(linha)
 
@@ -245,8 +245,8 @@ def test_parse_linha_levanta_com_duas_chaves_na_mesma_linha():
 def test_le_sefaz_levanta_com_duas_linhas_fundidas_por_proximidade(tmp_path):
     from unittest.mock import patch
     a = _palavras_em(100.0, _linha(CHAVE_OK).split())
-    b = _palavras_em(101.0, _linha(CHAVE_OK, "70,00").split(), x_inicial=len(a))
-    pdf = _pdf_mock(a + b, chr(10).join(CABECALHO + _rodape(2, "259,63")))
+    b = _palavras_em(101.0, _linha(CHAVE_OK, "70.00").split(), x_inicial=len(a))
+    pdf = _pdf_mock(a + b, chr(10).join(CABECALHO + _rodape(2, "259.63")))
     with patch("conferencia.leitor_sefaz.pdfplumber.open", return_value=pdf):
         with pytest.raises(ValueError):
             le_sefaz(tmp_path / "x.pdf")
