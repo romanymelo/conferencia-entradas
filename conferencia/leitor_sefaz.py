@@ -7,11 +7,13 @@ import pdfplumber
 
 from conferencia.modelo import Cabecalho, NotaSefaz
 from conferencia.parsing import (
-    normaliza_cnpj, normaliza_numero, normaliza_serie, parse_data_br, parse_valor_us,
+    normaliza_cnpj, normaliza_numero, normaliza_serie, parse_data_br, parse_valor,
+    avisa_se_formato_mudou,
 )
 
-# FORMATO NUMERICO: a Sefaz escreve valores em formato US (56.80; 128,450.60), ao contrario do
-# Dominio (BR). A diferenca e do documento, nao um bug: nao "uniformize".
+# FORMATO NUMERICO: hoje a Sefaz escreve em formato US (56.80; 128,450.60). parse_valor aceita
+# BR e US; se o documento vier em outro formato, um aviso (por documento) e logado.
+FORMATO_ESPERADO = "US"
 log = logging.getLogger(__name__)
 
 _CHAVE = re.compile(r"\d{44}")
@@ -22,7 +24,7 @@ _TOLERANCIA_TOP = 2.0  # pt: palavras de uma mesma linha visual
 _PERIODO = re.compile(r"Período:\s*(\d{2}/\d{2}/\d{4})\s*-\s*(\d{2}/\d{2}/\d{4})")
 _CNPJ_ROTULO = re.compile(r"^CNPJ:\s*(\S+)", re.MULTILINE)
 # Rodape (spec 2.1): quantidade e valor total declarados pela propria Sefaz.
-_RODAPE = re.compile(r"Quantidade de Notas:?\s*(\d+)[^\d]*(\d[\d,]*\.\d{2})")
+_RODAPE = re.compile(r"Quantidade de Notas:?\s*(\d+)[^\d]*(\d[\d.,]*[.,]\d{2})(?!\d)")
 _RAZAO_ROTULO = re.compile(r"^Razão Social:\s*(.+?)\s*$", re.MULTILINE)
 
 
@@ -74,7 +76,7 @@ def parse_linha(palavras: list[dict]) -> NotaSefaz | None:
         data_emissao=parse_data_br(textos[0]),
         chave=textos[k],
         situacao=textos[k + 2],
-        valor=parse_valor_us(textos[k + 3]),
+        valor=parse_valor(textos[k + 3]),
     )
 
 
@@ -90,7 +92,7 @@ def _linhas_da_pagina(pagina) -> list[list[dict]]:
     return linhas
 
 
-def _confere_rodape(texto: str, notas: list[NotaSefaz]) -> None:
+def _confere_rodape(texto: str, notas: list[NotaSefaz], caminho: Path) -> None:
     """Reconcilia o que foi lido com o que a Sefaz declara no rodape (spec 2.1).
     Comparacao exata em Decimal: o total declarado e uma soma exata dos valores.
     Relatorio sem notas e legitimo (rodape declara 0): so falha se o rodape declarar mais.
@@ -100,7 +102,8 @@ def _confere_rodape(texto: str, notas: list[NotaSefaz]) -> None:
         raise ValueError(
             f"rodape da Sefaz (Quantidade de Notas / valor total) encontrado {len(rodapes)} vez(es); esperado 1"
         )
-    qtd, total = int(rodapes[0][0]), parse_valor_us(rodapes[0][1])
+    avisa_se_formato_mudou(rodapes[0][1], FORMATO_ESPERADO, caminho)
+    qtd, total = int(rodapes[0][0]), parse_valor(rodapes[0][1])
     if qtd != len(notas):
         raise ValueError(
             f"Quantidade de Notas declarada no rodape ({qtd}) difere das linhas lidas ({len(notas)})"
@@ -129,5 +132,5 @@ def le_sefaz(caminho: Path) -> tuple[Cabecalho, list[NotaSefaz]]:
                         nota.chave, lido, da_chave,
                     )
                 notas.append(nota)
-    _confere_rodape("\n".join(textos), notas)
+    _confere_rodape("\n".join(textos), notas, caminho)
     return cabecalho, notas

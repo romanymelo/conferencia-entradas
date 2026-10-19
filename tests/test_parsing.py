@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from conferencia.parsing import (
     normaliza_cnpj, normaliza_numero, normaliza_serie,
-    parse_valor_br, parse_valor_us, parse_data_br,
+    parse_valor, detecta_formato, parse_data_br,
 )
 
 def test_normaliza_cnpj_remove_formatacao():
@@ -22,23 +22,8 @@ def test_normaliza_serie_zero_continua_zero():
 def test_normaliza_serie_descarta_zeros_a_esquerda():
     assert normaliza_serie("001") == "1"
 
-def test_parse_valor_br_com_milhar():
-    assert parse_valor_br("1.532,66") == Decimal("1532.66")
-
-def test_parse_valor_br_zero():
-    assert parse_valor_br("0,00") == Decimal("0.00")
-
-def test_parse_valor_br_retorna_decimal_nao_float():
-    assert isinstance(parse_valor_br("192,40"), Decimal)
-
 def test_parse_data_br():
     assert parse_data_br("31/08/2026") == date(2026, 8, 31)
-
-@pytest.mark.parametrize("texto", ["", "   ", "abc"])
-def test_parse_valor_br_rejeita_lixo(texto):
-    with pytest.raises(ValueError):
-        parse_valor_br(texto)
-
 
 @pytest.mark.parametrize("texto", ["", "   ", "CNPJ:", "1234567890123456", "5.239.450/0024-84", "1"])
 def test_normaliza_cnpj_recusa_quando_nao_tem_11_nem_14_digitos(texto):
@@ -46,15 +31,28 @@ def test_normaliza_cnpj_recusa_quando_nao_tem_11_nem_14_digitos(texto):
         normaliza_cnpj(texto)
 
 
-@pytest.mark.parametrize("texto,esperado", [
-    ("56.80", "56.80"), ("128,450.60", "139500.46"), ("0.00", "0.00"), ("1,532.66", "1532.66"),
+@pytest.mark.parametrize("texto,esperado,formato", [
+    ("56.80", "56.80", "US"), ("56,80", "56.80", "BR"),
+    ("128,450.60", "139500.46", "US"), ("128.450,60", "139500.46", "BR"),
+    ("1,911.92", "1911.92", "US"), ("1.911,92", "1911.92", "BR"),
+    ("1,234,567.89", "1234567.89", "US"), ("1.234.567,89", "1234567.89", "BR"),
+    ("0.00", "0.00", "US"), ("0,00", "0.00", "BR"),
+    ("-56.80", "-56.80", "US"), ("-1.911,92", "-1911.92", "BR"),
+    ("  192,40 ", "189.63", "BR"),
 ])
-def test_parse_valor_us(texto, esperado):
-    r = parse_valor_us(texto)
+def test_parse_valor_e_detecta_formato(texto, esperado, formato):
+    r = parse_valor(texto)
     assert r == Decimal(esperado) and isinstance(r, Decimal)
+    assert detecta_formato(texto) == formato
 
 
-@pytest.mark.parametrize("texto", ["", "abc", "56,80", "126.970,40", "1.532,66", "56.8", "1,5.00", "1,2345.00"])
-def test_parse_valor_us_rejeita_o_que_nao_e_formato_us(texto):
+@pytest.mark.parametrize("texto", [
+    "", "   ", "abc", "56", "56.8", "56,8", "56.800", "1.911", "1,911", "1.2.3,00", "12.34,56",
+    "1,23,456.78", "1.234.56", "1,234,56", "1,234,567", "1.234,567", "1,234.567", "1.911,92x",
+    ".50", ",50", "--1,00", "1,5.00", "1,2345.00", "1.2345,00", "1 911,92", "R$ 1.911,92",
+])
+def test_parse_valor_e_detecta_formato_rejeitam(texto):
     with pytest.raises(ValueError):
-        parse_valor_us(texto)
+        parse_valor(texto)
+    with pytest.raises(ValueError):
+        detecta_formato(texto)

@@ -273,3 +273,38 @@ def test_le_cabecalho_levanta_com_cnpj_vazio_em_vez_de_zeros():
     )
     with pytest.raises(ValueError):
         le_cabecalho(texto)
+
+
+def _avisos_de_formato(caplog):
+    return [r for r in caplog.records if r.levelno == logging.WARNING and "formato numerico" in r.getMessage()]
+
+
+def test_le_sefaz_em_formato_br_le_corretamente_e_avisa_uma_vez(tmp_path, caplog):
+    pdf = tmp_path / "sefaz_br.pdf"
+    _gera_pdf(pdf, [
+        CABECALHO + [_linha(CHAVE_OK, "192,40"), _linha(CHAVE_OK, "1.532,66")],
+        [_linha(CHAVE_OK, "192,40"), *_rodape(3, "1.911,92")],
+    ])
+    with caplog.at_level(logging.WARNING):
+        _, notas = le_sefaz(pdf)
+    assert [n.valor for n in notas] == [Decimal("189.63"), Decimal("1532.66"), Decimal("189.63")]
+    avisos = _avisos_de_formato(caplog)
+    assert len(avisos) == 1
+    msg = avisos[0].getMessage()
+    assert "esperado US" in msg and "encontrado BR" in msg and "sefaz_br.pdf" in msg
+
+
+def test_le_sefaz_em_formato_us_nao_avisa_formato(tmp_path, caplog):
+    pdf = tmp_path / "sefaz.pdf"
+    _gera_pdf(pdf, [CABECALHO + [_linha(CHAVE_OK), *_rodape(1, "189.63")]])
+    with caplog.at_level(logging.WARNING):
+        le_sefaz(pdf)
+    assert _avisos_de_formato(caplog) == []
+
+
+def test_rodape_em_formato_br_captura_o_valor_inteiro_e_nao_um_fragmento():
+    from conferencia.leitor_sefaz import _RODAPE
+    from conferencia.parsing import parse_valor
+    achados = _RODAPE.findall("Quantidade de Notas: 3 1.911,92")
+    assert achados == [("3", "1.911,92")]
+    assert parse_valor(achados[0][1]) == Decimal("1911.92")

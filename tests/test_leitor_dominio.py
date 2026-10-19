@@ -235,3 +235,26 @@ def test_le_cabecalho_levanta_com_cnpj_vazio_em_vez_de_zeros():
              "Período: 01/09/2026 até 30/09/2026\n")
     with pytest.raises(ValueError):
         le_cabecalho(texto)
+
+
+def test_le_dominio_em_formato_us_le_corretamente_e_avisa_uma_vez(tmp_path, caplog):
+    import logging
+    pdf = tmp_path / "dominio_us.pdf"
+    us = BASE.replace("52,10", "1,049.16")
+    _gera_pdf(pdf, [CABECALHO + [us, us], ["1Total Geral", "2,098.32ICMS 0.00 0.00"]])
+    with caplog.at_level(logging.WARNING):
+        _, lancs = le_dominio(pdf)
+    assert [l.valor_contabil for l in lancs] == [Decimal("1049.16")] * 2
+    avisos = [r for r in caplog.records if r.levelno == logging.WARNING and "formato numerico" in r.getMessage()]
+    assert len(avisos) == 1
+    msg = avisos[0].getMessage()
+    assert "esperado BR" in msg and "encontrado US" in msg and "dominio_us.pdf" in msg
+
+
+def test_le_dominio_em_formato_br_nao_avisa_formato(tmp_path, caplog):
+    import logging
+    pdf = tmp_path / "dominio.pdf"
+    _gera_pdf(pdf, [CABECALHO + [BASE, "Total Geral", "52,10 ICMS 0,00"]])
+    with caplog.at_level(logging.WARNING):
+        le_dominio(pdf)
+    assert not [r for r in caplog.records if "formato numerico" in r.getMessage()]

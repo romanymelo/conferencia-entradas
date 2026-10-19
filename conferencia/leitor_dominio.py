@@ -6,11 +6,13 @@ import pdfplumber
 
 from conferencia.modelo import Cabecalho, LancamentoDominio
 from conferencia.parsing import (
-    normaliza_cnpj, normaliza_numero, normaliza_serie, parse_data_br, parse_valor_br,
+    normaliza_cnpj, normaliza_numero, normaliza_serie, parse_data_br, parse_valor,
+    avisa_se_formato_mudou,
 )
 
-# FORMATO NUMERICO: o Dominio escreve valores em formato BR (126.970,40), ao contrario da
-# Sefaz (US). A diferenca e do documento, nao um bug: nao "uniformize".
+# FORMATO NUMERICO: hoje o Dominio escreve em formato BR (126.970,40). parse_valor aceita
+# BR e US; se o documento vier em outro formato, um aviso (por documento) e logado.
+FORMATO_ESPERADO = "BR"
 _DATA = re.compile(r"\d{2}/\d{2}/\d{4}")
 _CNPJ_CPF = re.compile(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2}")
 _UF = re.compile(r"[A-Z]{2}")
@@ -21,7 +23,7 @@ _CNPJ_ROTULO = re.compile(r"^CNPJ:\s*(\S+)", re.MULTILINE)
 # Rodape (spec 2.2): a linha "Total Geral" abre com o Valor Contabil total.
 # No PDF real o valor fica na linha SEGUINTE ao rotulo, colado ao 'ICMS' ('126.970,40ICMS').
 _ROTULO_TOTAL_GERAL = re.compile(r"Total Geral")
-_PRIMEIRO_VALOR = re.compile(r"(?<![\d.,])(\d[\d.]*,\d{2})")
+_PRIMEIRO_VALOR = re.compile(r"(?<![\d.,])(\d[\d.,]*[.,]\d{2})(?!\d)")
 _EMPRESA = re.compile(r"^(\d+)\s+-\s+(.+?)\s*$", re.MULTILINE)
 # Campo de cabecalho que divide a linha com a razao social ('... LTDA Página: 0001').
 _CAMPO_DE_CABECALHO = re.compile(r"\s+[^\W\d_][\w.]*:.*$")
@@ -80,11 +82,11 @@ def parse_linha(texto: str) -> LancamentoDominio | None:
         especie=int(antes[1 + n]),
         data_emissao=parse_data_br(antes[1]),
         data_entrada=parse_data_br(antes[2]),
-        valor_contabil=parse_valor_br(depois[ufs[0] + 1]),
+        valor_contabil=parse_valor(depois[ufs[0] + 1]),
     )
 
 
-def _total_geral(linhas: list[str]) -> Decimal:
+def _total_geral(linhas: list[str], caminho: Path) -> Decimal:
     """Valor Contabil do 'Total Geral': 1o valor monetario da linha seguinte ao rotulo."""
     rotulos = [i for i, l in enumerate(linhas) if _ROTULO_TOTAL_GERAL.search(l)]
     if len(rotulos) != 1:
@@ -93,14 +95,15 @@ def _total_geral(linhas: list[str]) -> Decimal:
     valor = _PRIMEIRO_VALOR.search(seguintes[0]) if seguintes else None
     if not valor:
         raise ValueError("Total Geral do Dominio sem valor na linha seguinte ao rotulo")
-    return parse_valor_br(valor.group(1))
+    avisa_se_formato_mudou(valor.group(1), FORMATO_ESPERADO, caminho)
+    return parse_valor(valor.group(1))
 
 
-def _confere_total_geral(linhas: list[str], lancamentos: list[LancamentoDominio]) -> None:
+def _confere_total_geral(linhas: list[str], lancamentos: list[LancamentoDominio], caminho: Path) -> None:
     """Reconcilia a soma de todos os lancamentos (NF-e ou nao) com o Total Geral (spec 2.2).
     Comparacao exata em Decimal: o Total Geral e uma soma exata dos Valores Contabeis.
     Relatorio sem lancamentos e legitimo (Total Geral 0,00): so falha se o total declarado for maior."""
-    total = _total_geral(linhas)
+    total = _total_geral(linhas, caminho)
     soma = sum((l.valor_contabil for l in lancamentos), Decimal("0"))
     if soma != total:
         raise ValueError(f"Total Geral declarado ({total}) difere da soma dos lancamentos lidos ({soma})")
@@ -146,5 +149,5 @@ def le_dominio(caminho: Path) -> tuple[Cabecalho, list[LancamentoDominio]]:
                 lancamento = parse_linha(linha)
                 if lancamento is not None:
                     lancamentos.append(lancamento)
-    _confere_total_geral(todas, lancamentos)
+    _confere_total_geral(todas, lancamentos, caminho)
     return cabecalho, lancamentos
