@@ -475,7 +475,7 @@ def test_parse_linha_ignora_linha_que_nao_e_dado(texto):
     assert parse_linha(palavras(*texto.split())) is None
 
 def test_decompoe_chave_extrai_cnpj_serie_e_numero():
-    # chave real da nota 1004582, serie 1, emitente 45.723.174/0011-92
+    # chave ficticia da nota 1004582, serie 1, emitente 45.723.174/0011-92
     chave = "27260945723174001192550010010045821234567890"
     assert decompoe_chave(chave) == ("45723174001192", "1", 1004582)
 

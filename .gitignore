@@ -4,8 +4,11 @@ saida/
 *.pdf
 *.xlsx
 
-# Amostra real de cliente, usada pelo teste de ouro, nunca versionada
+# Amostra real de cliente, usada pelo teste de ouro, nunca versionada.
+# Ignora a pasta inteira, nao so os PDFs: qualquer arquivo colocado aqui e
+# dado de cliente, inclusive planilhas, anotacoes ou exportacoes.
 tests/amostra/
+tests/amostras/
 
 # Python
 __pycache__/
