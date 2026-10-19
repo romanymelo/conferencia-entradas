@@ -13,6 +13,7 @@ from conferencia.planilha import escreve_planilha
 from conferencia.relatorio_pdf import escreve_relatorio, nome_arquivo
 
 LIMITE_CODIGO_SAIDA = 125
+PASTA_SEM_PERIODO = "_sem_periodo"
 CODIGO_ENTRADA_INVALIDA = 126  # 1..125 = nº de empresas divergentes (LIMITE_CODIGO_SAIDA)
 
 
@@ -97,47 +98,52 @@ def _executa(entrada: Path, saida: Path, log: list[str], anota) -> int:
 
     pares, problemas = pareia(identificados)
 
-    # O mês vem do período declarado; vale o do primeiro arquivo quando há mais de um.
-    if identificados:
-        mes = f"{identificados[0].cabecalho.periodo_inicio:%Y-%m}"
-        pasta = saida / mes
-        nome_planilha = f"resumo_conferencia_{mes}.xlsx"
-        meses = {a.cabecalho.periodo_inicio.strftime("%Y-%m") for a in identificados}
-        if len(meses) > 1:
-            anota(f"AVISO: períodos de meses diferentes; saída em {pasta}")
-    else:
-        pasta = saida
-        nome_planilha = "resumo_conferencia.xlsx"
-    pasta.mkdir(parents=True, exist_ok=True)
-
-    resultados: list[ResultadoEmpresa] = []
+    # (mês AAAA-MM ou None, resultado): cada empresa vai para a pasta do próprio período
+    resultados: list[tuple[str | None, ResultadoEmpresa]] = []
     for par in pares:
+        mes = f"{par.empresa.periodo_inicio:%Y-%m}"
         rotulo = f"{par.empresa.codigo} - {par.empresa.razao_social}"
         try:
             resultado = _confere_par(par)
         except Exception as e:
             erro = f"{rotulo}: falha ao ler {par.caminho_sefaz} / {par.caminho_dominio}: {e}"
             anota(f"ERRO {erro}")
-            resultados.append(_erro_leitura(erro))
+            resultados.append((mes, _erro_leitura(erro)))
             continue
         try:
+            pasta = saida / mes
+            pasta.mkdir(parents=True, exist_ok=True)
             escreve_relatorio(resultado, pasta / nome_arquivo(resultado))
         except Exception as e:
             # a conferência está válida e entra na planilha; só o PDF falhou
             anota(f"ERRO ao gravar o PDF de {rotulo}: {e}")
             resultado.erro = f"conferência feita, mas o PDF não foi gravado: {e}"
         anota(f"{rotulo}: {resultado.status} ({len(resultado.ocorrencias)} ocorrências)")
-        resultados.append(resultado)
+        resultados.append((mes, resultado))
     for problema in problemas:
         anota(f"{problema.status}: {problema.erro}")
-    resultados += problemas + falhas
+    resultados += [(None, r) for r in problemas + falhas]
 
-    divergentes = sum(1 for r in resultados if r.status == Status.DIVERGENTE)
+    por_periodo: dict[str | None, list[ResultadoEmpresa]] = {}
+    for mes, r in resultados:
+        por_periodo.setdefault(mes, []).append(r)
+    divergentes = sum(1 for _, r in resultados if r.status == Status.DIVERGENTE)
     anota(f"{len(resultados)} linha(s) no Resumo, {divergentes} divergente(s), "
           f"{time.monotonic() - inicio:.1f}s")
+    # Resultados sem período (SEM PAR, DUPLICADO, PERÍODO DIVERGENTE, ERRO DE LEITURA)
+    # vão para a pasta PASTA_SEM_PERIODO; ela existe sempre que houver algum.
+    for mes in sorted(por_periodo, key=lambda m: (m is None, m or "")):
+        rotulo = mes or PASTA_SEM_PERIODO
+        anota(f"saída {saida / rotulo}: {len(por_periodo[mes])} linha(s) no Resumo")
+    # Um log para a rodada inteira (cronológico), na raiz da saída: cobre também o que
+    # foi ignorado ou falhou e não pertence a período nenhum.
+    saida.mkdir(parents=True, exist_ok=True)
     # log primeiro: com a planilha aberta no Excel, escreve_planilha levanta PermissionError
-    (pasta / "log_execucao.txt").write_text("\n".join(log) + "\n", encoding="utf-8")
-    escreve_planilha(resultados, pasta / nome_planilha)
+    (saida / "log_execucao.txt").write_text("\n".join(log) + "\n", encoding="utf-8")
+    for mes, rs in por_periodo.items():
+        pasta = saida / (mes or PASTA_SEM_PERIODO)
+        pasta.mkdir(parents=True, exist_ok=True)
+        escreve_planilha(rs, pasta / f"resumo_conferencia_{mes or 'sem_periodo'}.xlsx")
     return divergentes
 
 

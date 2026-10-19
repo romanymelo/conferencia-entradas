@@ -175,13 +175,29 @@ Batendo CNPJ, número e valor, a nota está conferida.
 <raiz>/
 ├── entrada/                       PDFs de todas as empresas, misturados
 └── saida/
-    └── <AAAA-MM>/
-        ├── resumo_conferencia_<AAAA-MM>.xlsx
-        ├── <código>_<RAZAO_SOCIAL>.pdf     (um por empresa)
-        └── log_execucao.txt
+    ├── log_execucao.txt           um por rodada, cronológico
+    ├── <AAAA-MM>/                 um por período presente nas empresas conferidas
+    │   ├── resumo_conferencia_<AAAA-MM>.xlsx
+    │   └── <código>_<RAZAO_SOCIAL>.pdf     (um por empresa do período)
+    └── _sem_periodo/              só existe se houver resultado sem período
+        └── resumo_conferencia_sem_periodo.xlsx
 ```
 
-O subdiretório `<AAAA-MM>` vem do período declarado nos relatórios.
+Uma conferência é por período. Cada empresa vai para a pasta do mês do próprio
+período declarado (`<AAAA-MM>`, do início do período), com um Resumo/Detalhe que
+contém apenas as empresas daquele mês. Uma rodada com meses misturados produz
+uma pasta por mês, sem aviso de cautela; o log lista as pastas geradas.
+
+Resultados sem período (`SEM PAR`, `DUPLICADO`, `PERÍODO DIVERGENTE` e
+`ERRO DE LEITURA` de arquivo ilegível) não têm empresa e, portanto, mês. Vão
+para `_sem_periodo/`, com planilha própria, em vez de se misturarem às de um
+mês. A pasta existe sempre que houver ao menos um desses casos; uma rodada em
+que tudo falhou ainda gera `_sem_periodo/` e o log. O `ERRO DE LEITURA` de um
+par cujo período já se conhece (falha ao ler os dois PDFs) fica na pasta
+desse mês.
+
+O código de saída continua sendo o total de empresas `DIVERGENTE` da rodada
+inteira, somando todos os períodos.
 
 ### 4.1 PDF por empresa
 
@@ -221,7 +237,7 @@ acesso.
 
 ### 4.3 Log
 
-Texto simples: arquivos lidos e classificados, empresas pareadas, empresas sem
+Texto simples, um único `saida/log_execucao.txt` por rodada (cronológico; cobre também arquivos ignorados e falhas, que não pertencem a período algum): arquivos lidos e classificados, empresas pareadas, empresas sem
 par, divergências de período, erros de leitura, tempo total.
 
 ## 5. Arquitetura

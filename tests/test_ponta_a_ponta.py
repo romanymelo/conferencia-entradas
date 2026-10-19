@@ -51,32 +51,32 @@ def _us(valor_br: str) -> str:
     return valor_br.replace(".", "X").replace(",", ".").replace("X", ",")
 
 
-def _sefaz(caminho, notas, cnpj="12.345.678/0001-95"):
+def _sefaz(caminho, notas, cnpj="12.345.678/0001-95", mes="09"):
     linhas = [
         "SECRETARIA DE ESTADO DA FAZENDA DE ALAGOAS",
         f"CNPJ: {cnpj}",
         "Razão Social: FARMACIA MODELO LTDA",
-        "Período: 01/09/2026 - 30/09/2026",
+        f"Período: 01/{mes}/2026 - 30/{mes}/2026",
     ]
     for numero, valor in notas:
         linhas.append(
-            f"05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / {numero} "
+            f"05/{mes}/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / {numero} "
             f"{_chave(numero)} Saída Ativa {_us(valor)}"
         )
     linhas += [f"Quantidade de Notas: {len(notas)}", f"Valor Total: {_us(_soma(v for _, v in notas))}"]
     _pdf(caminho, linhas)
 
 
-def _dominio(caminho, notas, cnpj="12.345.678/0001-95", extra=()):
+def _dominio(caminho, notas, cnpj="12.345.678/0001-95", extra=(), mes="09", codigo=101):
     linhas = [
         "ACOMPANHAMENTO DE ENTRADAS",
-        "101 - FARMACIA MODELO LTDA",
+        f"{codigo} - FARMACIA MODELO LTDA",
         f"CNPJ: {cnpj}",
-        "Período: 01/09/2026 até 30/09/2026",
+        f"Período: 01/{mes}/2026 até 30/{mes}/2026",
     ]
     for numero, valor in notas:
         linhas.append(
-            f"1 05/09/2026 05/09/2026 {numero} 1 36 6 FORNECEDOR TESTE LTDA "
+            f"1 05/{mes}/2026 05/{mes}/2026 {numero} 1 36 6 FORNECEDOR TESTE LTDA "
             f"45.723.174/0011-92 240000015 1-102 101 AL {valor} ICMS 0,00"
         )
     _pdf(caminho, [*linhas, *extra, "Total Geral", f"{_soma(v for _, v in notas)}ICMS 0,00"])
@@ -90,9 +90,14 @@ def entrada(tmp_path):
 
 
 def _resumo(saida):
-    aba = load_workbook(next(saida.rglob("*.xlsx")))["Resumo"]
-    cab = [c.value for c in aba[1]]
-    return [{cab[i]: c.value for i, c in enumerate(linha)} for linha in aba.iter_rows(min_row=2)]
+    """Linhas do Resumo de todas as planilhas da saída (uma por período + _sem_periodo)."""
+    linhas = []
+    for xlsx in sorted(saida.rglob("*.xlsx")):
+        aba = load_workbook(xlsx)["Resumo"]
+        cab = [c.value for c in aba[1]]
+        linhas += [{cab[i]: c.value for i, c in enumerate(linha)}
+                   for linha in aba.iter_rows(min_row=2)]
+    return linhas
 
 
 def _log(saida):
@@ -169,6 +174,76 @@ def test_empresa_sem_notas_no_mes_com_relatorios_vazios_e_coerentes_sai_ok(entra
     assert linha["Qtd Sefaz"] == 0 and linha["Qtd Domínio"] == 0
 
 
+def _duas_empresas_em_meses_diferentes(entrada):
+    _sefaz(entrada / "s8.pdf", [(100, "50,00")], cnpj="11.111.111/0001-91", mes="08")
+    _dominio(entrada / "d8.pdf", [(100, "50,00")], cnpj="11.111.111/0001-91", mes="08", codigo=201)
+    _sefaz(entrada / "s9.pdf", [(200, "70,00")], cnpj="22.222.222/0001-91", mes="09")
+    _dominio(entrada / "d9.pdf", [(200, "70,00")], cnpj="22.222.222/0001-91", mes="09", codigo=202)
+
+
+def _codigos(xlsx):
+    aba = load_workbook(xlsx)["Resumo"]
+    return [r[0] for r in aba.iter_rows(min_row=2, values_only=True)]
+
+
+def test_empresas_de_meses_diferentes_vao_cada_uma_para_a_propria_pasta(entrada, tmp_path):
+    saida = tmp_path / "saida"
+    _duas_empresas_em_meses_diferentes(entrada)
+
+    assert executa(entrada, saida) == 0
+
+    assert sorted(p.name for p in saida.iterdir()) == ["2026-08", "2026-09", "log_execucao.txt"]
+    assert [p.name for p in (saida / "2026-08").glob("*.pdf")] == ["201_FARMACIA_MODELO_LTDA.pdf"]
+    assert [p.name for p in (saida / "2026-09").glob("*.pdf")] == ["202_FARMACIA_MODELO_LTDA.pdf"]
+    assert _codigos(saida / "2026-08" / "resumo_conferencia_2026-08.xlsx") == ["201"]
+    assert _codigos(saida / "2026-09" / "resumo_conferencia_2026-09.xlsx") == ["202"]
+    log = _log(saida)
+    assert "meses diferentes" not in log
+    assert "2026-08" in log and "2026-09" in log
+
+
+def test_divergente_em_um_mes_conta_no_codigo_de_saida_da_rodada_inteira(entrada, tmp_path):
+    saida = tmp_path / "saida"
+    _duas_empresas_em_meses_diferentes(entrada)
+    _dominio(entrada / "d9.pdf", [], cnpj="22.222.222/0001-91", mes="09", codigo=202)
+
+    assert executa(entrada, saida) == 1
+    assert _codigos(saida / "2026-08" / "resumo_conferencia_2026-08.xlsx") == ["201"]
+
+
+def test_resultado_sem_periodo_vai_para_sem_periodo_ao_lado_dos_meses(entrada, tmp_path):
+    saida = tmp_path / "saida"
+    _duas_empresas_em_meses_diferentes(entrada)
+    _sefaz(entrada / "orfa.pdf", [(1, "1,00")], cnpj="33.333.333/0001-91", mes="09")
+    (entrada / "quebrado.pdf").write_bytes(b"isto nao e um PDF")
+
+    assert executa(entrada, saida) == 0
+
+    sem = saida / "_sem_periodo"
+    status = sorted(l["Status"] for l in _resumo_de(sem / "resumo_conferencia_sem_periodo.xlsx"))
+    assert status == sorted([Status.SEM_PAR, Status.ERRO_LEITURA])
+    # as planilhas dos meses não recebem o que não tem período
+    assert _codigos(saida / "2026-09" / "resumo_conferencia_2026-09.xlsx") == ["202"]
+
+
+def test_rodada_so_com_falhas_ainda_produz_planilha_e_log(entrada, tmp_path):
+    saida = tmp_path / "saida"
+    (entrada / "quebrado.pdf").write_bytes(b"isto nao e um PDF")
+
+    assert executa(entrada, saida) == 0
+
+    [linha] = _resumo(saida)
+    assert linha["Status"] == Status.ERRO_LEITURA
+    assert (saida / "_sem_periodo" / "resumo_conferencia_sem_periodo.xlsx").is_file()
+    assert "quebrado.pdf" in (saida / "log_execucao.txt").read_text(encoding="utf-8")
+
+
+def _resumo_de(xlsx):
+    aba = load_workbook(xlsx)["Resumo"]
+    cab = [c.value for c in aba[1]]
+    return [dict(zip(cab, r)) for r in aba.iter_rows(min_row=2, values_only=True)]
+
+
 def test_sem_par_aparece_no_resumo_sem_pdf(entrada, tmp_path):
     saida = tmp_path / "saida"
     _sefaz(entrada / "s.pdf", [(100, "50,00")])
@@ -221,9 +296,9 @@ def test_sefaz_com_nota_perdida_na_leitura_vira_erro_de_leitura_nao_ok(entrada, 
         "CNPJ: 12.345.678/0001-95",
         "Razão Social: FARMACIA MODELO LTDA",
         "Período: 01/09/2026 - 30/09/2026",
-        f"05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / 100 "
+        "05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / 100 "
         f"{_chave(100)} Saída Ativa 50.00",
-        f"05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / 101 "
+        "05/09/2026 08:52:43 45.723.174/0011-92 FORNECEDOR TESTE LTDA 1 / 101 "
         f"{_chave(101)[:20]} {_chave(101)[20:]} Saída Ativa 70.00",
         "Quantidade de Notas: 2", "Valor Total: 120.00",
     ])
@@ -264,13 +339,12 @@ def rodada_amostra(tmp_path_factory):
     for p in pdfs:
         shutil.copy(p, entrada)
     executa(entrada, saida)
-    wb = load_workbook(next(saida.rglob("*.xlsx")))
-    return wb, saida
+    return [load_workbook(x) for x in sorted(saida.rglob("*.xlsx"))], saida
 
 
 @pytest.mark.parametrize("par", _PARES, ids=lambda p: f"empresa_{p.empresa.codigo}")
 def test_teste_de_ouro_reconcilia_cada_empresa_com_os_proprios_rodapes(rodada_amostra, par):
-    wb, _ = rodada_amostra
+    wbs, _ = rodada_amostra
     # os leitores ja exigem que linhas lidas == rodape declarado (Sefaz) e Total Geral (Dominio)
     _, notas = le_sefaz(par.caminho_sefaz)
     _, lancamentos = le_dominio(par.caminho_dominio)
@@ -278,10 +352,14 @@ def test_teste_de_ouro_reconcilia_cada_empresa_com_os_proprios_rodapes(rodada_am
     total_sefaz_declarado = sum((n.valor for n in notas), Decimal("0"))
     total_geral_declarado = sum((l.valor_contabil for l in lancamentos), Decimal("0"))
 
-    aba = wb["Resumo"]
-    cabecalho = [c.value for c in aba[1]]
-    linhas = [dict(zip(cabecalho, r)) for r in aba.iter_rows(min_row=2, values_only=True)]
-    linha = next(l for l in linhas if l["Código"] == par.empresa.codigo)
+    def _resumo_de(wb):
+        aba = wb["Resumo"]
+        cabecalho = [c.value for c in aba[1]]
+        return [dict(zip(cabecalho, r)) for r in aba.iter_rows(min_row=2, values_only=True)]
+
+    # a planilha do período da empresa é a única que a contém
+    wb = next(w for w in wbs if any(l["Código"] == par.empresa.codigo for l in _resumo_de(w)))
+    linha = next(l for l in _resumo_de(wb) if l["Código"] == par.empresa.codigo)
 
     assert linha["Status"] not in (Status.ERRO_LEITURA, Status.SEM_PAR), linha["Observação"]
     assert linha["Qtd Sefaz"] == qtd_declarada

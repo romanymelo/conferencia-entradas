@@ -28,11 +28,11 @@ para pasta de entrada inexistente.
 PDFs que não são relatórios da Sefaz nem do Domínio são ignorados e registrados
 no log.
 
-## O que sai em `saida/<AAAA-MM>/`
+## O que sai em `saida/`
 
-O mês vem do período declarado nos relatórios, não da data de hoje.
+Cada empresa vai para `saida/<AAAA-MM>/`, o mês do período declarado nos relatórios (não da data de hoje); meses misturados na mesma rodada geram uma pasta por mês, cada uma com a própria planilha. Resultados sem período (`SEM PAR`, `DUPLICADO`, `PERÍODO DIVERGENTE`, arquivo ilegível) ficam em `saida/_sem_periodo/`.
 
-- `resumo_conferencia_<AAAA-MM>.xlsx` (sem nenhum relatório identificado, `resumo_conferencia.xlsx` direto em `saida/`): aba `Resumo` (uma linha por empresa, inclusive as corretas
+- `resumo_conferencia_<AAAA-MM>.xlsx` : aba `Resumo` (uma linha por empresa, inclusive as corretas
   e as com problema de arquivo) e aba `Detalhe` (uma linha por ocorrência).
   A coluna `Diferença` costuma ser diferente de zero mesmo em empresa `OK`, porque
   corresponde às notas `FORA DO PERÍODO` (na 101, −2.815,35 com status `OK`). A
@@ -40,7 +40,7 @@ O mês vem do período declarado nos relatórios, não da data de hoje.
 - Um PDF por empresa conferida, `<código>_<razão social>.pdf`, inclusive as sem
   divergência (serve de comprovante). Contém só as ocorrências, com a chave de
   acesso.
-- `log_execucao.txt`: arquivos lidos, pares, problemas e tempo total.
+- `saida/log_execucao.txt` (um por rodada): arquivos lidos, pares, problemas e tempo total.
 
 Empresas com status `SEM PAR`, `PERÍODO DIVERGENTE`, `DUPLICADO` ou
 `ERRO DE LEITURA` não geram PDF; aparecem só no `Resumo`, com a explicação na
@@ -58,7 +58,7 @@ O resultado é `dist/conferencia-entradas.exe` (arquivo único, cerca de 34 MB).
 
 Uso: copie o `.exe` para uma pasta qualquer, crie a pasta `entrada` ao lado dele (se
 não existir, ele cria na primeira execução e avisa), coloque nela os PDFs e dê duplo
-clique. Os resultados aparecem em `saida/<AAAA-MM>/`, também ao lado do `.exe`. A
+clique. Os resultados aparecem em `saida/`, também ao lado do `.exe`. A
 janela espera um Enter antes de fechar, para dar tempo de ler o resumo.
 
 Observações: por ser um arquivo único, ele se descompacta a cada execução e leva
