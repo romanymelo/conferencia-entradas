@@ -266,10 +266,29 @@ correspondente no Resumo, a falha vai para o log, e as demais seguem.
 
 ## 6. Verificação
 
-### 6.1 Teste de ouro: empresa 101, setembro de 2026
+### 6.1 Teste de ouro: cada empresa da amostra contra os próprios rodapés
 
-Os dois relatórios reais da FARMACIA MODELO LTDA (CNPJ 12.345.678/0001-95) no
-período 01/09/2026 a 30/09/2026. A conferência manual fecha exatamente:
+O teste de ouro roda o pipeline completo sobre os PDFs reais de `tests/amostras`
+(ou `tests/amostra`), pasta local e nunca versionada. Ele não fixa cifras de uma
+empresa: o pareamento usa o módulo `descoberta` (por CNPJ, independente dos nomes
+dos arquivos) e o teste é parametrizado sobre todos os pares encontrados. Com
+menos de dois PDFs na pasta, é pulado com mensagem pedindo os pares reais.
+
+Para cada empresa, as expectativas vêm dos próprios documentos, lidos por
+`le_sefaz` e `le_dominio` (que já reconciliam as linhas lidas com os rodapés):
+
+1. O status não é `ERRO DE LEITURA` nem `SEM PAR`: os dois documentos foram lidos até o fim.
+2. `Qtd Sefaz` e `Total Sefaz` do Resumo são iguais à quantidade e ao total declarados no rodapé da Sefaz.
+3. `Total Domínio` mais a soma das ocorrências `NÃO-NFe` da empresa é igual ao `Total Geral` declarado no Domínio.
+4. Existe um PDF cujo nome começa com o código da empresa.
+
+O teste não afirma contagens de `FALTANDO`, `SOBRANDO` etc.: são resultados de
+negócio que variam por empresa e por mês, e o valor correto não é conhecido pelo teste.
+
+#### Exemplo ilustrativo (uma empresa, um mês)
+
+Não são asserções do teste. É a conferência manual de uma empresa específica
+(farmácia, código 101) no período 01/09/2026 a 30/09/2026, que fechava exatamente:
 
 ```
 Domínio — Total Geral ................. 128.450,60
@@ -280,7 +299,7 @@ Domínio — Total Geral ................. 128.450,60
 Sefaz — total ......................... 124.155,05   ✓
 ```
 
-Resultado esperado:
+Resultado naquele mês:
 
 | Categoria | Qtd |
 |---|---|
@@ -294,8 +313,6 @@ Resultado esperado:
 
 Status: **OK**. Notas na Sefaz: 204. Total Sefaz: 124.155,05. Total Domínio
 espécie 36: 126.970,40.
-
-A amostra hoje em `tests/amostras` é de outro mês (agosto/2026); por isso o teste de ouro afirma os totais declarados nos rodapés dos próprios documentos, e não as cifras fixas acima.
 
 ### 6.2 Testes sintéticos
 

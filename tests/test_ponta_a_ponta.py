@@ -9,9 +9,12 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
 
 from conferencia.modelo import Categoria, Status
+from conferencia.descoberta import Par, identifica, pareia
+from conferencia.leitor_dominio import le_dominio
+from conferencia.leitor_sefaz import le_sefaz
 from main import executa
 
-# Pasta local com os dois PDFs reais de uma empresa, nunca versionada (.gitignore).
+# Pasta local com os PDFs reais (um par por empresa), nunca versionada (.gitignore).
 # Aceita "amostra" ou "amostras": o pareamento e por CNPJ lido de dentro do PDF, entao
 # nem o nome da pasta nem o nome dos arquivos importam para a conferencia.
 _CANDIDATAS = ("amostra", "amostras")
@@ -21,13 +24,6 @@ AMOSTRA = next(
     Path(__file__).parent / _CANDIDATAS[0],
 )
 
-
-# Valores DECLARADOS nos rodapes da amostra em tests/amostras (independem do parser e do mes):
-# Sefaz "Quantidade de Notas: 174 128,450.60" e Dominio "Total Geral 126.970,40".
-# Trocar a amostra exige editar apenas estes tres numeros.
-SEFAZ_QTD_DECLARADA = 174
-SEFAZ_TOTAL_DECLARADO = Decimal("139500.46")
-DOMINIO_TOTAL_GERAL_DECLARADO = Decimal("138848.05")
 
 # --- PDFs fabricados (dados fictícios) ---
 
@@ -240,50 +236,73 @@ def test_sefaz_com_nota_perdida_na_leitura_vira_erro_de_leitura_nao_ok(entrada, 
 
 # --- teste de ouro: depende dos PDFs reais, locais e não versionados ---
 
-@pytest.fixture
-def pasta_amostra(tmp_path):
-    pdfs = sorted(AMOSTRA.glob("*.pdf")) if AMOSTRA.exists() else []
+def _pdfs_da_amostra() -> list[Path]:
+    return sorted(AMOSTRA.glob("*.pdf")) if AMOSTRA.exists() else []
+
+
+def _pares_da_amostra() -> list[Par]:
+    """Pares Sefaz/Dominio da pasta, por CNPJ lido de dentro dos PDFs (nomes nao importam)."""
+    if len(_pdfs_da_amostra()) < 2:
+        return []
+    return pareia([a for a in map(identifica, _pdfs_da_amostra()) if a])[0]
+
+
+_PARES = _pares_da_amostra()
+
+
+@pytest.fixture(scope="module")
+def rodada_amostra(tmp_path_factory):
+    pdfs = _pdfs_da_amostra()
     if len(pdfs) < 2:
         pytest.skip(
-            f"crie a pasta {AMOSTRA} e coloque nela os dois PDFs reais da empresa 101: "
-            "'Entradas 101 novo.pdf' (Domínio) e 'Notas fiscais entrada 101.pdf' (Sefaz)"
+            f"a pasta {AMOSTRA} tem menos de dois PDFs: coloque nela os pares reais "
+            "(relatorio da Sefaz e do Dominio de cada empresa)"
         )
-    entrada = tmp_path / "entrada"
+    base = tmp_path_factory.mktemp("amostra")
+    entrada, saida = base / "entrada", base / "saida"
     entrada.mkdir()
     for p in pdfs:
         shutil.copy(p, entrada)
-    return entrada, tmp_path / "saida"
-
-
-def test_teste_de_ouro_empresa_101(pasta_amostra):
-    entrada, saida = pasta_amostra
     executa(entrada, saida)
-
     wb = load_workbook(next(saida.rglob("*.xlsx")))
+    return wb, saida
+
+
+@pytest.mark.parametrize("par", _PARES, ids=lambda p: f"empresa_{p.empresa.codigo}")
+def test_teste_de_ouro_reconcilia_cada_empresa_com_os_proprios_rodapes(rodada_amostra, par):
+    wb, _ = rodada_amostra
+    # os leitores ja exigem que linhas lidas == rodape declarado (Sefaz) e Total Geral (Dominio)
+    _, notas = le_sefaz(par.caminho_sefaz)
+    _, lancamentos = le_dominio(par.caminho_dominio)
+    qtd_declarada = len(notas)
+    total_sefaz_declarado = sum((n.valor for n in notas), Decimal("0"))
+    total_geral_declarado = sum((l.valor_contabil for l in lancamentos), Decimal("0"))
+
     aba = wb["Resumo"]
     cabecalho = [c.value for c in aba[1]]
-    linha = {cabecalho[i]: c.value for i, c in enumerate(aba[2])}
+    linhas = [dict(zip(cabecalho, r)) for r in aba.iter_rows(min_row=2, values_only=True)]
+    linha = next(l for l in linhas if l["Código"] == par.empresa.codigo)
 
-    assert linha["Código"] == "101"
-    assert linha["Status"] != Status.ERRO_LEITURA, linha["Observação"]
-    assert linha["Qtd Sefaz"] == SEFAZ_QTD_DECLARADA
-    assert Decimal(str(linha["Total Sefaz"])) == SEFAZ_TOTAL_DECLARADO
+    assert linha["Status"] not in (Status.ERRO_LEITURA, Status.SEM_PAR), linha["Observação"]
+    assert linha["Qtd Sefaz"] == qtd_declarada
+    assert Decimal(str(linha["Total Sefaz"])) == total_sefaz_declarado
 
     # Total Dominio so soma a espécie NF-e; as demais viram ocorrencia NAO-NFe no Detalhe.
     det = wb["Detalhe"]
     cab_det = [c.value for c in det[1]]
     nao_nfe = sum(
         (Decimal(str(r[cab_det.index("Valor Domínio")])) for r in det.iter_rows(min_row=2, values_only=True)
-         if r[cab_det.index("Categoria")] == Categoria.NAO_NFE),
+         if r[cab_det.index("Código")] == par.empresa.codigo
+         and r[cab_det.index("Categoria")] == Categoria.NAO_NFE),
         Decimal("0"),
     )
-    assert Decimal(str(linha["Total Domínio"])) + nao_nfe == DOMINIO_TOTAL_GERAL_DECLARADO
+    assert Decimal(str(linha["Total Domínio"])) + nao_nfe == total_geral_declarado
 
 
-def test_gera_pdf_para_a_empresa_conferida(pasta_amostra):
-    entrada, saida = pasta_amostra
-    executa(entrada, saida)
-    assert [p.name for p in saida.rglob("101_*.pdf")]
+@pytest.mark.parametrize("par", _PARES, ids=lambda p: f"empresa_{p.empresa.codigo}")
+def test_gera_pdf_para_cada_empresa_conferida(rodada_amostra, par):
+    _, saida = rodada_amostra
+    assert [p.name for p in saida.rglob(f"{par.empresa.codigo}_*.pdf")]
 
 
 def test_falha_ao_gravar_pdf_preserva_a_conferencia(entrada, tmp_path, monkeypatch):
